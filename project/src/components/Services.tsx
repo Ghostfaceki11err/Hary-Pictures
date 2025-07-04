@@ -104,7 +104,7 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center">
                     <div className="text-center">
                       <p className="text-white text-sm font-light tracking-widest">
-                        VIEW SERVICE
+                        REQUEST SERVICE
                       </p>
                     </div>
                   </div>
