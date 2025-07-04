@@ -96,6 +96,7 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
                     src={service.image}
                     alt={service.title}
                     className="w-full h-full object-cover transition-all duration-700"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-all duration-500"></div>
                   

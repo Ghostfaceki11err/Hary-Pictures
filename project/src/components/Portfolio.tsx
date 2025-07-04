@@ -190,6 +190,7 @@ const Portfolio: React.FC = () => {
                     src={item.image}
                     alt={item.title}
                     className="aspect-square w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                    loading="lazy"
                   />
                 ) : (
                 <div className="aspect-square bg-gradient-to-br from-blue-600 via-purple-600 to-cyan-500 opacity-80 group-hover:opacity-90 transition-opacity duration-300"></div>

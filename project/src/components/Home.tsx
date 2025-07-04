@@ -102,13 +102,14 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
           </div>
 
           {/* Large Hero Image */}
-          <div className="relative h-96 sm:h-[500px] lg:h-[600px] overflow-hidden max-w-6xl mx-auto">
+          <div className="relative inline-block">
             <img 
-              src="/Image/mesk/Caro_1744920338390_1.png"
+              src="/Image/wide/wide1.jpg"
               alt="Featured Photography Work"
-              className="w-full h-full object-contain transition-all duration-700"
+              className="block"
+              loading="lazy"
             />
-            <div className="absolute inset-0 bg-black/30"></div>
+            <div className="absolute inset-0 bg-black/30 pointer-events-none"></div>
           </div>
         </div>
       </section>
@@ -137,6 +138,7 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
                     src={item.image}
                     alt={item.title}
                     className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all duration-500"></div>
                   

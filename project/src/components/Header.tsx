@@ -39,6 +39,7 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onPageChange }) => {
               src="/20250423_215536.jpg" 
               alt="Photography Logo" 
               className="h-10 w-auto mr-3 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300"
+              loading="lazy"
             />
             <span className="text-white font-bold text-xl tracking-wide">Hary Pictures</span>
           </div>

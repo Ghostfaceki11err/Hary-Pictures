@@ -57,17 +57,19 @@ const About: React.FC = () => {
               </h2>
               
               <p className="text-lg text-gray-300 leading-relaxed">
-              **** ** * ***** ** ********** ***********,
-                * ********* ** ******** *** ******** ******** *** **** **** **************.
-                ** ****** ***** **** * ****** **** *** ************* ****** ******,
-                *** ** *** ****** **** * ****** *** ******** ******* *** ** *******.
+               — a passionate photographer with a lifelong love for capturing moments. 
+              My journey began as a curious kid snapping photos on my parents’ mobile phone, 
+              fascinated by the magic of freezing time with a single click. In my teenage years, I started exploring photography 
+              more seriously with my own phone, experimenting with light, angles, and storytelling through images.
               </p>
               
               <p className="text-lg text-gray-300 leading-relaxed">
-                **** ** * ***** ** ********** ***********,
-                * ********* ** ******** *** ******** ******** *** **** **** **************.
-                ** ****** ***** **** * ****** **** *** ************* ****** ******,
-                *** ** *** ****** **** * ****** *** ******** ******* *** ** *******.
+                Today, I’ve turned that childhood passion into a professional pursuit. 
+                Equipped with a full photography setup, I dedicate myself to creating stunning 
+                visuals that tell stories, evoke emotions, and preserve memories. Beyond photography, 
+                I’m also skilled in graphic design and Photoshop, which allows me to elevate my work with 
+                creative edits and professional-quality retouching. Photography isn’t just what I do — it’s who I am, 
+                and I’m excited to share my vision with the world.
               </p>
 
               <div className="flex flex-wrap gap-4 pt-4">
@@ -154,12 +156,12 @@ const About: React.FC = () => {
       <section className="py-20 bg-slate-800/50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h3 className="text-3xl font-bold text-white mb-8">
-            My Thoughts
+             
           </h3>
           <blockquote className="text-2xl text-gray-300 italic leading-relaxed">
-            "A Frozen Moment in Time Highlights photography's ability to preserve fleeting instants forever"
+            "Just like your beauty! "
           </blockquote>
-          <cite className="block text-blue-400 font-semibold mt-6">- Fasika </cite>
+          <cite className="block text-blue-400 font-semibold mt-6">  </cite>
         </div>
       </section>
     </div>
