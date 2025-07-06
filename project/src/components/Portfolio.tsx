@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Camera, X } from 'lucide-react';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
@@ -11,6 +11,11 @@ const Portfolio: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
+  
+  const headerRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   type PortfolioItem = {
     id: number;
@@ -25,37 +30,44 @@ const Portfolio: React.FC = () => {
     { id: 'የመስክ ፎቶዎች', label: 'የመስክ ፎቶዎች' },
     { id: 'portrait', label: 'Portraits' },
     { id: 'ክርስትና', label: 'ክርስትና' },
-    { id: 'ሽምግልና', label: 'ሽምግልና' }
+    { id: 'ሽምግልና', label: 'ሽምግልና' },
+    { id: 'ሰርግ', label: 'ሰርግ' }
   ];
 
   const meskImages = [
-    '/Image/mesk/Caro_1744920337266_0.png',
-    '/Image/mesk/Caro_1744920338390_1.png',
-    '/Image/mesk/Caro_1744920339210_2.png',
-    '/Image/mesk/Caro_1744920340106_3.png',
-    '/Image/mesk/Caro_1744920340911_4.png',
-    '/Image/mesk/Caro_1744920341748_5.png',
-    '/Image/mesk/Caro_1744920342536_6.png',
-    '/Image/mesk/Caro_1744920343220_7.png',
-    '/Image/mesk/Caro_1744920344046_8.png',
-    '/Image/mesk/Caro_1744920344845_9.png',
-    '/Image/mesk/Caro_1744921380662_1.png',
-    '/Image/mesk/Caro_1744921381612_2.png',
-    '/Image/mesk/Caro_1744921382495_3.png',
-    '/Image/mesk/Caro_1744921383561_4.png',
-    '/Image/mesk/Caro_1744921384396_5.png',
-    '/Image/mesk/Caro_1744921387263_8.png',
-    '/Image/mesk/Caro_1744921388056_9.png',
-    '/Image/mesk/Caro_1744921863423_0.png',
-    '/Image/mesk/Caro_1744921864509_1.png',
-    '/Image/mesk/Caro_1744921865407_2.png',
-    '/Image/mesk/Caro_1744921866382_3.png',
+    '/Image/mesk/Caro_1744920337266_0.webp',
+    '/Image/mesk/Caro_1744920338390_1.webp',
+    '/Image/mesk/Caro_1744920339210_2.webp',
+    '/Image/mesk/Caro_1744920340106_3.webp',
+    '/Image/mesk/Caro_1744920340911_4.webp',
+    '/Image/mesk/Caro_1744920341748_5.webp',
+    '/Image/mesk/Caro_1744920342536_6.webp',
+    '/Image/mesk/Caro_1744920343220_7.webp',
+    '/Image/mesk/Caro_1744920344046_8.webp',
+    '/Image/mesk/Caro_1744920344845_9.webp',
+    '/Image/mesk/Caro_1744921380662_1.webp',
+    '/Image/mesk/Caro_1744921381612_2.webp',
+    '/Image/mesk/Caro_1744921382495_3.webp',
+    '/Image/mesk/Caro_1744921383561_4.webp',
+    '/Image/mesk/Caro_1744921384396_5.webp',
+    '/Image/mesk/Caro_1744921387263_8.webp',
+    '/Image/mesk/Caro_1744921388056_9.webp',
+    '/Image/mesk/Caro_1744921863423_0.webp',
+    '/Image/mesk/Caro_1744921864509_1.webp',
+    '/Image/mesk/Caro_1744921865407_2.webp',
+    '/Image/mesk/Caro_1744921866382_3.webp',
   ];
 
   const portraitImages = [
-    '/Image/portrait/IMG_20250209_210543_070.jpg',
-    '/Image/portrait/IMG_20250209_212716_397.jpg',
-    '/Image/portrait/IMG_20250209_212848_037.jpg',
+    '/Image/portrait/IMG_20250209_210543_070.webp',
+    '/Image/portrait/IMG_20250209_212716_397.webp',
+    '/Image/portrait/IMG_20250209_212848_037.webp',
+    '/Image/portrait/Caro_1751278472655_0.webp',
+    '/Image/portrait/Caro_1751278792791_3.webp',
+    '/Image/portrait/Caro_1751368587572_0.webp',
+    '/Image/portrait/Caro_1751374763451_0.webp',
+    '/Image/portrait/Caro_1751374764490_3.webp',
+    '/Image/portrait/Caro_1751374864883_7.webp',
   ];
 
   const portraitItems: PortfolioItem[] = portraitImages.map((img, idx) => ({
@@ -67,25 +79,25 @@ const Portfolio: React.FC = () => {
   }));
 
   const shimglinaImages = [
-    '/Image/shimglina/Caro_1749502988071_5.png',
-    '/Image/shimglina/Caro_1749502983577_1.png',
-    '/Image/shimglina/Caro_1749502985837_3.png',
-    '/Image/shimglina/Caro_1747084532140_6.png',
-    '/Image/shimglina/Caro_1747085559964_1.png',
-    '/Image/shimglina/Caro_1747084527401_2.png',
-    '/Image/shimglina/Caro_1747084524732_0.png',
-    '/Image/shimglina/Caro_1740055145650_3.png',
-    '/Image/shimglina/Caro_1740113961896_0.png',
-    '/Image/shimglina/Caro_1740055144495_2.png',
-    '/Image/shimglina/Caro_1740055143390_1.png',
-    '/Image/shimglina/Caro_1740055142324_0.png',
-    '/Image/shimglina/Caro_1749502989407_6.png',
-    '/Image/shimglina/Caro_1749502986917_4.png',
-    '/Image/shimglina/Caro_1749502984697_2.png',
-    '/Image/shimglina/Caro_1749502982509_0.png',
-    '/Image/shimglina/Caro_1747084526251_1.png',
-    '/Image/shimglina/Caro_1747084529673_4.png',
-    '/Image/shimglina/Caro_1747084528554_3.png',
+    '/Image/shimglina/Caro_1749502988071_5.webp',
+    '/Image/shimglina/Caro_1749502983577_1.webp',
+    '/Image/shimglina/Caro_1749502985837_3.webp',
+    '/Image/shimglina/Caro_1747084532140_6.webp',
+    '/Image/shimglina/Caro_1747085559964_1.webp',
+    '/Image/shimglina/Caro_1747084527401_2.webp',
+    '/Image/shimglina/Caro_1747084524732_0.webp',
+    //'/Image/shimglina/Caro_1740055145650_3.webp',
+    '/Image/shimglina/Caro_1740113961896_0.webp',
+    '/Image/shimglina/Caro_1740055144495_2.webp',
+    '/Image/shimglina/Caro_1740055143390_1.webp',
+    '/Image/shimglina/Caro_1740055142324_0.webp',
+    '/Image/shimglina/Caro_1749502989407_6.webp',
+    '/Image/shimglina/Caro_1749502986917_4.webp',
+    '/Image/shimglina/Caro_1749502984697_2.webp',
+    '/Image/shimglina/Caro_1749502982509_0.webp',
+    '/Image/shimglina/Caro_1747084526251_1.webp',
+    '/Image/shimglina/Caro_1747084529673_4.webp',
+    '/Image/shimglina/Caro_1747084528554_3.webp',
   ];
 
   const shimglinaItems: PortfolioItem[] = shimglinaImages.map((img, idx) => ({
@@ -97,11 +109,11 @@ const Portfolio: React.FC = () => {
   }));
 
   const cristinaImages = [
-    '/Image/cristina/Caro_1746461453024_0.png',
-    '/Image/cristina/Caro_1746461454349_1.png',
-    '/Image/cristina/Caro_1746461455323_2.png',
-    '/Image/cristina/Caro_1746478217049_3.png',
-    '/Image/cristina/Caro_1746650889272_0.png',
+    '/Image/cristina/Caro_1746461453024_0.webp',
+    '/Image/cristina/Caro_1746461454349_1.webp',
+    '/Image/cristina/Caro_1746461455323_2.webp',
+    '/Image/cristina/Caro_1746478217049_3.webp',
+    '/Image/cristina/Caro_1746650889272_0.webp',
   ];
 
   const cristinaItems: PortfolioItem[] = cristinaImages.map((img, idx) => ({
@@ -109,6 +121,25 @@ const Portfolio: React.FC = () => {
     category: 'ክርስትና',
     title: `Cristina ${idx + 1}`,
     description: 'ክርስትና ፎቶዎች',
+    image: img
+  }));
+
+  const sergImages = [
+    '/Image/serg/Caro_1751540926709_0.webp',
+    '/Image/serg/Caro_1751540927481_2.webp',
+    '/Image/serg/Caro_1751540928963_4.webp',
+    '/Image/serg/Caro_1751540929765_5.webp',
+    '/Image/serg/Caro_1751540930796_6.webp',
+    '/Image/serg/Caro_1751540931627_7.webp',
+    '/Image/serg/Caro_1751540932456_8.webp',
+    '/Image/serg/Caro_1751540933308_9.webp',
+  ];
+
+  const sergItems: PortfolioItem[] = sergImages.map((img, idx) => ({
+    id: 500 + idx,
+    category: 'ሰርግ',
+    title: `Serg ${idx + 1}`,
+    description: 'ሰርግ ፎቶዎች',
     image: img
   }));
 
@@ -123,6 +154,7 @@ const Portfolio: React.FC = () => {
     ...portraitItems,
     ...shimglinaItems,
     ...cristinaItems,
+    ...sergItems,
     /*{ id: 101, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461453024_0.png' },*/
     /*{ id: 104, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461454349_1.png' },*/
     /*{ id: 107, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461455323_2.png' },*/
@@ -132,25 +164,80 @@ const Portfolio: React.FC = () => {
     ? portfolioItems 
     : portfolioItems.filter(item => item.category === selectedCategory);
 
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          setIsVisible(prev => ({
+            ...prev,
+            [entry.target.id]: true
+          }));
+        }
+      });
+    }, observerOptions);
+
+    const elements = [
+      { ref: headerRef, id: 'header' },
+      { ref: filterRef, id: 'filter' },
+      { ref: gridRef, id: 'grid' }
+    ];
+
+    elements.forEach(({ ref, id }) => {
+      if (ref.current) {
+        ref.current.id = id;
+        observer.observe(ref.current);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="min-h-screen pt-20">
       {/* Header */}
-      <section className="py-20 text-center">
+      <section 
+        ref={headerRef}
+        className={`py-20 text-center transition-all duration-1000 ${
+          isVisible['header'] 
+            ? 'opacity-100 translate-y-0' 
+            : 'opacity-0 translate-y-10'
+        }`}
+      >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6">
+          <h1 className={`text-5xl sm:text-6xl font-bold text-white mb-6 transition-all duration-1000 delay-300 ${
+            isVisible['header'] 
+              ? 'opacity-100 translate-y-0' 
+              : 'opacity-0 translate-y-10'
+          }`}>
             My Portfolio
           </h1>
-          <p className="text-xl text-gray-300 leading-relaxed">
+          <p className={`text-xl text-gray-300 leading-relaxed transition-all duration-1000 delay-500 ${
+            isVisible['header'] 
+              ? 'opacity-100 translate-y-0' 
+              : 'opacity-0 translate-y-10'
+          }`}>
             A collection of my finest work, showcasing the beauty and emotion in every frame
           </p>
         </div>
       </section>
 
       {/* Category Filter */}
-      <section className="pb-12">
+      <section 
+        ref={filterRef}
+        className={`pb-12 transition-all duration-1000 ${
+          isVisible['filter'] 
+            ? 'opacity-100 translate-y-0' 
+            : 'opacity-0 translate-y-10'
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-center gap-4">
-            {categories.map((category) => (
+            {categories.map((category, index) => (
               <button
                 key={category.id}
                 onClick={() => setSelectedCategory(category.id)}
@@ -158,7 +245,14 @@ const Portfolio: React.FC = () => {
                   selectedCategory === category.id
                     ? 'bg-blue-600 text-white shadow-lg'
                     : 'bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white'
+                } ${
+                  isVisible['filter'] 
+                    ? 'opacity-100 translate-y-0' 
+                    : 'opacity-0 translate-y-10'
                 }`}
+                style={{
+                  transitionDelay: `${index * 100}ms`
+                }}
               >
                 {category.label}
               </button>
@@ -168,13 +262,27 @@ const Portfolio: React.FC = () => {
       </section>
 
       {/* Portfolio Grid */}
-      <section className="pb-20">
+      <section 
+        ref={gridRef}
+        className={`pb-20 transition-all duration-1000 ${
+          isVisible['grid'] 
+            ? 'opacity-100 translate-y-0' 
+            : 'opacity-0 translate-y-10'
+        }`}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredItems.map((item, index) => (
               <div
                 key={item.id}
-                className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 cursor-pointer"
+                className={`group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 cursor-pointer ${
+                  isVisible['grid'] 
+                    ? 'opacity-100 translate-y-0' 
+                    : 'opacity-0 translate-y-10'
+                }`}
+                style={{
+                  transitionDelay: `${index * 50}ms`
+                }}
                 onClick={() => {
                   if (item.image) {
                     setLightboxIndex(index);

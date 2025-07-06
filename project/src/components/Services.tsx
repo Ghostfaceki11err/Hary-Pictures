@@ -10,49 +10,49 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
       title: 'የመስክ ፎቶዎች',
       //category: 'የመስክ',
       size: 'large',
-      image: '/Image/mesk/Caro_1744920338390_1.png'
+      image: '/Image/mesk/Caro_1744920338390_1.webp'
     },
     {
       title: 'ክርስትና',
       //category: 'CORPORATE • EVENT',
       size: 'medium',
-      image: '/Image/cristina/Caro_1746478217049_3.png'
+      image: '/Image/cristina/Caro_1746478217049_3.webp'
     },
     {
       title: 'PORTRAITS',
       //category: 'PORTRAIT',
       size: 'medium',
-      image: '/Image/portrait/IMG_20250209_212848_037.jpg'
+      image: '/Image/portrait/IMG_20250209_212848_037.webp'
     },
     {
       title: 'ሽምግልና',
       //category: 'ሽምግልና',
       size: 'medium',
-      image: '/Image/shimglina/Caro_1749502983577_1.png'
+      image: '/Image/shimglina/Caro_1749502983577_1.webp'
     },
     /*{
       title: 'Fashion photography',
-      image: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=600',
+      image: ' ',
       size: 'medium'
     },
     {
       title: 'Commercial photography',
-      image: 'https://images.pexels.com/photos/1181467/pexels-photo-1181467.jpeg?auto=compress&cs=tinysrgb&w=600',
+      image: ' ',
       size: 'medium'
     },
     {
       title: 'Product photography',
-      image: 'https://images.pexels.com/photos/1181533/pexels-photo-1181533.jpeg?auto=compress&cs=tinysrgb&w=600',
+      image: ' ',
       size: 'medium'
     },
     {
       title: 'Editorial photography',
-      image: 'https://images.pexels.com/photos/1181298/pexels-photo-1181298.jpeg?auto=compress&cs=tinysrgb&w=600',
+      image: ' ',
       size: 'large'
     },
     {
       title: 'Travel photography',
-      image: 'https://images.pexels.com/photos/1181354/pexels-photo-1181354.jpeg?auto=compress&cs=tinysrgb&w=600',
+      image: ' ',
       size: 'medium'
     }*/
   ];
