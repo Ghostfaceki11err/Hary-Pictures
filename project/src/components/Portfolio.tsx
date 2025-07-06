@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Camera, X } from 'lucide-react';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
@@ -11,8 +11,7 @@ const Portfolio: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
-  
+
   const headerRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -164,63 +163,18 @@ const Portfolio: React.FC = () => {
     ? portfolioItems 
     : portfolioItems.filter(item => item.category === selectedCategory);
 
-  useEffect(() => {
-    const observerOptions = {
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px'
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          setIsVisible(prev => ({
-            ...prev,
-            [entry.target.id]: true
-          }));
-        }
-      });
-    }, observerOptions);
-
-    const elements = [
-      { ref: headerRef, id: 'header' },
-      { ref: filterRef, id: 'filter' },
-      { ref: gridRef, id: 'grid' }
-    ];
-
-    elements.forEach(({ ref, id }) => {
-      if (ref.current) {
-        ref.current.id = id;
-        observer.observe(ref.current);
-      }
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <div className="min-h-screen pt-20">
       {/* Header */}
       <section 
         ref={headerRef}
-        className={`py-20 text-center transition-all duration-1000 ${
-          isVisible['header'] 
-            ? 'opacity-100 translate-y-0' 
-            : 'opacity-0 translate-y-10'
-        }`}
+        className="py-20 text-center"
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className={`text-5xl sm:text-6xl font-bold text-white mb-6 transition-all duration-1000 delay-300 ${
-            isVisible['header'] 
-              ? 'opacity-100 translate-y-0' 
-              : 'opacity-0 translate-y-10'
-          }`}>
+          <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6">
             My Portfolio
           </h1>
-          <p className={`text-xl text-gray-300 leading-relaxed transition-all duration-1000 delay-500 ${
-            isVisible['header'] 
-              ? 'opacity-100 translate-y-0' 
-              : 'opacity-0 translate-y-10'
-          }`}>
+          <p className="text-xl text-gray-300 leading-relaxed">
             A collection of my finest work, showcasing the beauty and emotion in every frame
           </p>
         </div>
@@ -229,11 +183,7 @@ const Portfolio: React.FC = () => {
       {/* Category Filter */}
       <section 
         ref={filterRef}
-        className={`pb-12 transition-all duration-1000 ${
-          isVisible['filter'] 
-            ? 'opacity-100 translate-y-0' 
-            : 'opacity-0 translate-y-10'
-        }`}
+        className="pb-12"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-center gap-4">
@@ -245,10 +195,6 @@ const Portfolio: React.FC = () => {
                   selectedCategory === category.id
                     ? 'bg-blue-600 text-white shadow-lg'
                     : 'bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white'
-                } ${
-                  isVisible['filter'] 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-10'
                 }`}
                 style={{
                   transitionDelay: `${index * 100}ms`
@@ -264,22 +210,14 @@ const Portfolio: React.FC = () => {
       {/* Portfolio Grid */}
       <section 
         ref={gridRef}
-        className={`pb-20 transition-all duration-1000 ${
-          isVisible['grid'] 
-            ? 'opacity-100 translate-y-0' 
-            : 'opacity-0 translate-y-10'
-        }`}
+        className="pb-20"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredItems.map((item, index) => (
               <div
                 key={item.id}
-                className={`group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 cursor-pointer ${
-                  isVisible['grid'] 
-                    ? 'opacity-100 translate-y-0' 
-                    : 'opacity-0 translate-y-10'
-                }`}
+                className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-2 cursor-pointer"
                 style={{
                   transitionDelay: `${index * 50}ms`
                 }}
