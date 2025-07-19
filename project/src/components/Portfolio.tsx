@@ -30,7 +30,10 @@ const Portfolio: React.FC = () => {
     { id: 'portrait', label: 'Portraits' },
     { id: 'ክርስትና', label: 'ክርስትና' },
     { id: 'ሽምግልና', label: 'ሽምግልና' },
-    { id: 'ሰርግ', label: 'ሰርግ' }
+    { id: 'ሰርግ', label: 'ሰርግ' },
+    { id: 'other', label: 'Other' },
+
+
   ];
 
   const meskImages = [
