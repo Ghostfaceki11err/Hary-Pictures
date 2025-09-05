@@ -88,7 +88,7 @@ const Portfolio: React.FC = () => {
     '/Image/shimglina/Caro_1747085559964_1.webp',
     '/Image/shimglina/Caro_1747084527401_2.webp',
     '/Image/shimglina/Caro_1747084524732_0.webp',
-    //'/Image/shimglina/Caro_1740055145650_3.webp',
+    //'/shimglina/Caro_1740055145650_3.webp',
     '/Image/shimglina/Caro_1740113961896_0.webp',
     '/Image/shimglina/Caro_1740055144495_2.webp',
     '/Image/shimglina/Caro_1740055143390_1.webp',
