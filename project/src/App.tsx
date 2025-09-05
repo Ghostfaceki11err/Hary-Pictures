@@ -1,65 +1,63 @@
 import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Home from './components/Home';
 import Portfolio from './components/Portfolio';
 import About from './components/About';
 import Services from './components/Services';
 import Contact from './components/Contact';
-import { Sun, Moon } from 'lucide-react';
+import { AdminPanel } from './admin';
+import AdminGate from './admin/AdminGate';
+import NotFound from './components/NotFound';
 
-function App() {
+// Component to handle routing logic
+function AppContent() {
   const [currentPage, setCurrentPage] = useState('home');
-  const [darkMode, setDarkMode] = useState(false);
+  const location = useLocation();
 
   React.useEffect(() => {
     const storedTheme = localStorage.getItem('theme');
     if (storedTheme === 'dark') {
-      setDarkMode(true);
       document.documentElement.classList.add('dark');
     } else {
-      setDarkMode(false);
       document.documentElement.classList.remove('dark');
     }
   }, []);
 
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => {
-      const newMode = !prev;
-      if (newMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-      }
-      return newMode;
-    });
-  };
-
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'home':
-        return <Home onPageChange={setCurrentPage} />;
-      case 'portfolio':
-        return <Portfolio />;
-      case 'about':
-        return <About />;
-      case 'services':
-        return <Services onPageChange={setCurrentPage} />;
-      case 'contact':
-        return <Contact />;
-      default:
-        return <Home onPageChange={setCurrentPage} />;
-    }
-  };
+  // Update currentPage based on URL
+  React.useEffect(() => {
+    const path = location.pathname;
+    if (path === '/') setCurrentPage('home');
+    else if (path === '/portfolio') setCurrentPage('portfolio');
+    else if (path === '/about') setCurrentPage('about');
+    else if (path === '/services') setCurrentPage('services');
+    else if (path === '/contact') setCurrentPage('contact');
+    else if (path === '/admin') setCurrentPage('admin');
+  }, [location]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 dark:from-slate-900 dark:via-blue-900 dark:to-slate-800">
       <Header currentPage={currentPage} onPageChange={setCurrentPage} />
       <main>
-        {renderPage()}
+        <Routes>
+          <Route path="/" element={<Home onPageChange={setCurrentPage} />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/services" element={<Services onPageChange={setCurrentPage} />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/admin" element={<AdminGate />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppContent />
+    </Router>
   );
 }
 
