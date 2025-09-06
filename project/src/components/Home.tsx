@@ -76,16 +76,29 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
         }))
         .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
 
-      // Group pictures by category and get one representative image per category
-      const categoryMap = new Map<string, Picture>();
+      // Group pictures by category and get one random representative image per category
+      const categoryMap = new Map<string, Picture[]>();
       transformedPictures.forEach(picture => {
-        if (picture.categories && !categoryMap.has(picture.categories.name_am)) {
-          categoryMap.set(picture.categories.name_am, picture);
+        if (picture.categories) {
+          const categoryName = picture.categories.name_am;
+          if (!categoryMap.has(categoryName)) {
+            categoryMap.set(categoryName, []);
+          }
+          categoryMap.get(categoryName)!.push(picture);
+        }
+      });
+
+      // Select one random image from each category
+      const selectedPictures: Picture[] = [];
+      categoryMap.forEach((pictures, categoryName) => {
+        if (pictures.length > 0) {
+          const randomIndex = Math.floor(Math.random() * pictures.length);
+          selectedPictures.push(pictures[randomIndex]);
         }
       });
 
       // Convert to portfolio items with appropriate sizes
-      const items: PortfolioItem[] = Array.from(categoryMap.values()).map((picture) => ({
+      const items: PortfolioItem[] = selectedPictures.map((picture) => ({
         title: picture.categories?.name_am || 'Other',
         size: 'medium' as 'large' | 'medium' | 'small',
         image: picture.image_url
@@ -93,6 +106,7 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
 
       // Debug logging
       console.log('Home - Categories with images:', Array.from(categoryMap.keys()));
+      console.log('Home - Random images selected:', selectedPictures.map(p => ({ category: p.categories?.name_am, image: p.image_url })));
       console.log('Home - Portfolio items count:', items.length);
 
       setPortfolioItems(items);
@@ -147,42 +161,89 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
       {/* Hero Section */}
       <section 
         ref={heroRef}
-        className={`relative pt-32 pb-16 transition-all duration-1000 ${
+        className={`relative pt-32 pb-16 overflow-hidden transition-all duration-1000 ${
           isVisible['hero'] 
             ? 'opacity-100 translate-y-0' 
             : 'opacity-0 translate-y-10'
         }`}
       >
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Animated background circles */}
+          <div className="absolute top-20 left-10 w-32 h-32 border border-white/10 rounded-full animate-pulse"></div>
+          <div className="absolute top-40 right-20 w-20 h-20 border border-white/5 rounded-full animate-pulse delay-1000"></div>
+          <div className="absolute bottom-20 left-1/4 w-16 h-16 border border-white/8 rounded-full animate-pulse delay-500"></div>
+          
+          {/* Subtle grid pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="w-full h-full" style={{
+              backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+              backgroundSize: '50px 50px'
+            }}></div>
+          </div>
+        </div>
         {/* Hero Content */}
         <div className="relative z-10 px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-4xl mx-auto mb-16">
-            <h1 className={`text-6xl sm:text-7xl lg:text-8xl font-bold text-white mb-4 tracking-wider transition-all duration-1000 delay-300 ${
+            {/* Main title with enhanced styling */}
+            <div className={`relative inline-block transition-all duration-1000 delay-300 ${
               isVisible['hero'] 
                 ? 'opacity-100 translate-y-0' 
                 : 'opacity-0 translate-y-10'
             }`}>
-            Hary Pictures
-            </h1>
-            <p className={`text-lg sm:text-xl text-gray-300 mb-8 tracking-widest font-light transition-all duration-1000 delay-500 ${
+              <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold text-white mb-4 tracking-wider relative">
+                <span className="relative z-10">Hary Pictures</span>
+                {/* Text shadow effect */}
+                <span className="absolute inset-0 text-transparent bg-gradient-to-r from-white/20 to-transparent bg-clip-text blur-sm">Hary Pictures</span>
+              </h1>
+              {/* Decorative line under title */}
+              <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-32 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent"></div>
+            </div>
+            
+            {/* Photography subtitle with enhanced styling */}
+            <div className={`relative transition-all duration-1000 delay-500 ${
               isVisible['hero'] 
                 ? 'opacity-100 translate-y-0' 
                 : 'opacity-0 translate-y-10'
             }`}>
-              P H O T O G R A P H Y
-            </p>
-            <div className={`w-24 h-px bg-white mx-auto mb-8 transition-all duration-1000 delay-700 ${
+              <p className="text-lg sm:text-xl text-gray-300 mb-8 tracking-widest font-light relative">
+                <span className="relative z-10">P H O T O G R A P H Y</span>
+                {/* Subtle glow effect */}
+                <span className="absolute inset-0 text-white/20 blur-sm">P H O T O G R A P H Y</span>
+              </p>
+            </div>
+            
+            {/* Enhanced divider */}
+            <div className={`relative mx-auto mb-8 transition-all duration-1000 delay-700 ${
               isVisible['hero'] 
                 ? 'opacity-100 scale-x-100' 
                 : 'opacity-0 scale-x-0'
-            }`}></div>
-            <p className={`text-lg text-gray-300 leading-relaxed max-w-2xl mx-auto font-light transition-all duration-1000 delay-900 ${
+            }`}>
+              <div className="w-24 h-px bg-gradient-to-r from-transparent via-white to-transparent"></div>
+              <div className="absolute inset-0 w-24 h-px bg-white/50 blur-sm"></div>
+            </div>
+            
+            {/* Description with enhanced styling */}
+            <div className={`relative transition-all duration-1000 delay-900 ${
               isVisible['hero'] 
                 ? 'opacity-100 translate-y-0' 
                 : 'opacity-0 translate-y-10'
             }`}>
-            A photographer based in Ethiopia specialized in graphic design, cinematography and event photography with 
-            a passion for capturing moments and telling stories through images.
-            </p>
+              <p className="text-lg text-gray-300 leading-relaxed max-w-2xl mx-auto font-light relative">
+                <span className="relative z-10">
+                  A photographer based in Ethiopia specialized in graphic design, cinematography and event photography with 
+                  a passion for capturing moments and telling stories through images.
+                </span>
+                {/* Subtle background highlight */}
+                <span className="absolute inset-0 bg-white/5 rounded-lg blur-xl"></span>
+              </p>
+            </div>
+            
+            {/* Floating accent elements */}
+            <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+              <div className="absolute top-1/4 left-1/4 w-1 h-1 bg-white/40 rounded-full animate-ping delay-1000"></div>
+              <div className="absolute top-1/3 right-1/3 w-0.5 h-0.5 bg-white/30 rounded-full animate-ping delay-1500"></div>
+            </div>
           </div>
 
           {/* Large Hero Image */}
@@ -191,13 +252,30 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
               ? 'opacity-100 scale-100' 
               : 'opacity-0 scale-95'
           }`}>
-            <img 
-              src="/Image/wide/wide1.jpg"
-              alt="Featured Photography Work"
-              className="block"
-              loading="lazy"
-            />
-            <div className="absolute inset-0 bg-black/30 pointer-events-none"></div>
+            <div className="relative group">
+              <img 
+                src="/Image/wide/wide1.jpg"
+                alt="Featured Photography Work"
+                className="block transition-all duration-700 group-hover:scale-105 group-hover:brightness-110"
+                loading="lazy"
+              />
+              {/* Creative overlay with gradient */}
+              <div className="absolute inset-0 bg-gradient-to-br from-black/20 via-transparent to-black/40 pointer-events-none transition-all duration-700 group-hover:from-black/10 group-hover:to-black/30"></div>
+              
+              {/* Animated border effect */}
+              <div className="absolute inset-0 border-2 border-white/0 group-hover:border-white/20 transition-all duration-700"></div>
+              
+              {/* Floating particles effect */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-4 left-4 w-2 h-2 bg-white/30 rounded-full animate-pulse"></div>
+                <div className="absolute top-8 right-8 w-1 h-1 bg-white/40 rounded-full animate-pulse delay-300"></div>
+                <div className="absolute bottom-6 left-8 w-1.5 h-1.5 bg-white/25 rounded-full animate-pulse delay-700"></div>
+                <div className="absolute bottom-4 right-4 w-1 h-1 bg-white/35 rounded-full animate-pulse delay-1000"></div>
+              </div>
+              
+              {/* Subtle glow effect */}
+              <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-sm"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -230,8 +308,8 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-auto">
-              {portfolioItems.map((item, index) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-auto">
+            {portfolioItems.map((item, index) => (
               <div
                 key={index}
                 className={`group cursor-pointer transition-all duration-700 hover:scale-105 ${
@@ -275,7 +353,7 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
                 </div>
               </div>
             ))}
-            </div>
+          </div>
           )}
 
           {/* View Portfolio Button */}

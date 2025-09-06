@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../admin/supabaseClient';
 
 interface ServicesProps {
@@ -26,6 +27,7 @@ interface ServiceItem {
 }
 
 const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
+  const navigate = useNavigate();
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,22 +61,36 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
         }))
         .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
 
-      // Group pictures by category and get one representative image per category
-      const categoryMap = new Map<string, Picture>();
+      // Group pictures by category and get one random representative image per category
+      const categoryMap = new Map<string, Picture[]>();
       transformedPictures.forEach(picture => {
-        if (picture.categories && !categoryMap.has(picture.categories.name_am)) {
-          categoryMap.set(picture.categories.name_am, picture);
+        if (picture.categories) {
+          const categoryName = picture.categories.name_am;
+          if (!categoryMap.has(categoryName)) {
+            categoryMap.set(categoryName, []);
+          }
+          categoryMap.get(categoryName)!.push(picture);
+        }
+      });
+
+      // Select one random image from each category
+      const selectedPictures: Picture[] = [];
+      categoryMap.forEach((pictures, categoryName) => {
+        if (pictures.length > 0) {
+          const randomIndex = Math.floor(Math.random() * pictures.length);
+          selectedPictures.push(pictures[randomIndex]);
         }
       });
 
       // Convert to service items with appropriate sizes
-      const serviceItems: ServiceItem[] = Array.from(categoryMap.values()).map((picture, index) => ({
+      const serviceItems: ServiceItem[] = selectedPictures.map((picture, index) => ({
         title: picture.categories?.name_am || 'Other',
-        size: index === 0 ? 'large' as 'large' | 'medium' | 'small' : 'medium' as 'large' | 'medium' | 'small', // First item is large, others are medium
+        size: 'medium' as 'large' | 'medium' | 'small', // All items are medium size
         image: picture.image_url
       }));
 
       console.log('Services - Categories with images:', Array.from(categoryMap.keys()));
+      console.log('Services - Random images selected:', selectedPictures.map(p => ({ category: p.categories?.name_am, image: p.image_url })));
       console.log('Services - Service items count:', serviceItems.length);
 
       setServices(serviceItems);
@@ -130,14 +146,17 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
-              {services.map((service, index) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
+            {services.map((service, index) => (
               <div
                 key={index}
                 className={`group cursor-pointer transition-all duration-500 hover:scale-105 ${
                   service.size === 'large' ? 'md:col-span-2 lg:col-span-2' : 'md:col-span-1'
                 }`}
-                onClick={() => onPageChange('contact')}
+                onClick={() => {
+                  console.log('Service image clicked, redirecting to contact page');
+                  navigate('/contact');
+                }}
               >
                 {/* Image Container */}
                 <div className={`relative overflow-hidden mb-4 ${
@@ -168,8 +187,8 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
                   </h3>
                 </div>
               </div>
-              ))}
-            </div>
+            ))}
+          </div>
           )}
         </div>
       </section>

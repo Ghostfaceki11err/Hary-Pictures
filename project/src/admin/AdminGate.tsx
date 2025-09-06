@@ -11,17 +11,36 @@ const AdminGate: React.FC = () => {
     let isMounted = true;
 
     async function checkSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      setIsAuthed(!!session);
-      setLoading(false);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        
+        if (error) {
+          console.error('Session check error:', error);
+          setIsAuthed(false);
+        } else {
+          setIsAuthed(!!session);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error('Session check failed:', error);
+        if (!isMounted) return;
+        setIsAuthed(false);
+        setLoading(false);
+      }
     }
 
     checkSession();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
-      setIsAuthed(!!session);
+      
+      // Handle different auth events
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+        setIsAuthed(false);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' && session) {
+        setIsAuthed(!!session);
+      }
       setLoading(false);
     });
 

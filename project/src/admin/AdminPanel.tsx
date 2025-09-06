@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent, useRef } from 'react';
-import { Camera, Upload, Plus, X, Edit, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent, useRef, useCallback, memo } from 'react';
+import { Camera, Upload, Plus, X, Edit, Trash2, Zap, BarChart3, Activity, Shield, Eye } from 'lucide-react';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
@@ -9,6 +9,78 @@ import { supabase } from './supabaseClient';
 
 const STORAGE_BUCKET = 'pictures';
 const STORAGE_PREFIX = 'public';
+
+// WebP conversion utility
+const convertToWebP = (file: File, quality: number = 0.8): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    // Check if file is already WebP
+    if (file.type === 'image/webp') {
+      resolve(file);
+      return;
+    }
+
+    // Check if file is a supported image type (including JFIF files)
+    const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
+                           file.name.toLowerCase().match(/\.(jfif|jpe)$/);
+    
+    if (!isSupportedType) {
+      reject(new Error('Unsupported file type. Please upload PNG, JPG, or JFIF images.'));
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+      // Set canvas dimensions
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      // Draw image on canvas
+      ctx?.drawImage(img, 0, 0);
+
+      // Convert to WebP
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            // Create new file with WebP extension
+            const webpFile = new File([blob], file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp'), {
+              type: 'image/webp',
+              lastModified: Date.now()
+            });
+            resolve(webpFile);
+          } else {
+            reject(new Error('Failed to convert image to WebP'));
+          }
+        },
+        'image/webp',
+        quality
+      );
+    };
+
+    img.onerror = () => {
+      reject(new Error('Failed to load image for conversion'));
+    };
+
+    // Load the image
+    img.src = URL.createObjectURL(file);
+  });
+};
+
+// Memoized Image Component for better performance
+const OptimizedImage = memo(({ src, alt, className, ...props }: { src: string; alt: string; className?: string; [key: string]: any }) => (
+  <img 
+    src={src} 
+    alt={alt} 
+    className={className}
+    loading="lazy"
+    decoding="async"
+    style={{ willChange: 'transform' }}
+    {...props}
+  />
+));
+OptimizedImage.displayName = 'OptimizedImage';
 
 interface Category {
   id: string;
@@ -26,7 +98,7 @@ interface Picture {
 type ToastType = 'success' | 'error' | 'info';
 interface ToastItem { id: number; type: ToastType; message: string }
 
-const AdminPanel: React.FC = () => {
+const AdminPanel: React.FC = memo(() => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [selectedFilterCategoryId, setSelectedFilterCategoryId] = useState<string>('');
@@ -36,7 +108,6 @@ const AdminPanel: React.FC = () => {
   const [title, setTitle] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [files, setFiles] = useState<File[]>([]);
-  const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -47,8 +118,6 @@ const AdminPanel: React.FC = () => {
   const [useUrlUpload, setUseUrlUpload] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [editedNameAm, setEditedNameAm] = useState('');
-  const [editedSlug, setEditedSlug] = useState('');
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteTargetCategoryId, setDeleteTargetCategoryId] = useState<string | null>(null);
@@ -95,13 +164,86 @@ const AdminPanel: React.FC = () => {
   const [showProfileUpload, setShowProfileUpload] = useState(false);
   const profileFileInputRef = useRef<HTMLInputElement>(null);
 
-  function showToast(type: ToastType, message: string) {
+  // WebP conversion states
+  const [isConverting, setIsConverting] = useState(false);
+  const [conversionProgress, setConversionProgress] = useState<{ [key: string]: number }>({});
+  const [showConversionPrompt, setShowConversionPrompt] = useState(false);
+  const [filesToConvert, setFilesToConvert] = useState<File[]>([]);
+  const [webpFiles, setWebpFiles] = useState<File[]>([]);
+
+  // Authentication state
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  const showToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setToasts(prev => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
-  }
+  }, []);
+
+  const handleImageClick = useCallback((index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  }, []);
+
+  const handleDeleteClick = useCallback((pictureId: string, imageUrl: string) => {
+    setIsDeletePicModalOpen(true);
+    setDeleteTargetPictureId(pictureId);
+    setDeleteTargetPictureUrl(imageUrl);
+  }, []);
+
+  const handleCategoryFilter = useCallback((categoryId: string) => {
+    setSelectedFilterCategoryId(categoryId);
+  }, []);
+
+  const handleSortChange = useCallback((sort: 'newest' | 'oldest' | 'title') => {
+    setSortMode(sort);
+  }, []);
+
+
+  // Authentication check function
+  const checkAuthentication = useCallback(async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        console.error('Authentication failed:', error);
+        // Redirect to login by clearing session
+        await supabase.auth.signOut();
+        window.location.href = '/admin';
+        return false;
+      }
+
+      setUserEmail(user.email || '');
+      setIsAuthenticated(true);
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      await supabase.auth.signOut();
+      window.location.href = '/admin';
+      return false;
+    }
+  }, []);
+
+  // Logout function
+  const handleLogout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+      showToast('info', 'You have been logged out');
+      // Redirect to login page
+      setTimeout(() => {
+        window.location.href = '/admin';
+      }, 1000);
+    } catch (error) {
+      console.error('Logout failed:', error);
+      showToast('error', 'Logout failed');
+    }
+  }, [showToast]);
+
+
+
 
   const headerRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLDivElement>(null);
@@ -289,10 +431,13 @@ const AdminPanel: React.FC = () => {
       const selectedFiles = Array.from(e.target.files);
       const validFiles: File[] = [];
       
-      // Validate each file for WebP format
+      // Validate each file for supported formats
       for (const file of selectedFiles) {
-        if (file.type !== 'image/webp') {
-          showToast('error', `File "${file.name}" is not a WebP image. Profile pictures must be in WebP format.`);
+        const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
+                               file.name.toLowerCase().match(/\.(jfif|jpe)$/);
+        
+        if (!isSupportedType) {
+          showToast('error', `File "${file.name}" is not a supported image format. Profile pictures must be PNG, JPG, JFIF, or WebP format.`);
           continue;
         }
         validFiles.push(file);
@@ -491,6 +636,32 @@ const AdminPanel: React.FC = () => {
     return map;
   }, [pictures]);
 
+  // Memoized filtered pictures for gallery
+  const filteredPictures = useMemo(() => {
+    return pictures
+      .filter(pic => {
+        // Filter out pictures from About Me category
+        if (pic.categories && isAboutMeCategory(pic.categories)) {
+          return false;
+        }
+        // Apply category filter
+        return !selectedFilterCategoryId || pic.categories?.id === selectedFilterCategoryId;
+      })
+      .sort((a, b) => {
+        if (sortMode === 'title') return a.title.localeCompare(b.title);
+        return 0;
+      });
+  }, [pictures, selectedFilterCategoryId, sortMode]);
+
+  // Memoized lightbox slides
+  const lightboxSlides = useMemo(() => {
+    return filteredPictures.map(pic => ({ 
+      src: pic.image_url, 
+      title: pic.title, 
+      description: pic.categories?.name_am 
+    }));
+  }, [filteredPictures]);
+
   // URL sync (persist selection, search, sort)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -499,6 +670,35 @@ const AdminPanel: React.FC = () => {
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState(null, '', newUrl);
   }, [selectedFilterCategoryId, sortMode]);
+
+  // Initialize authentication check
+  useEffect(() => {
+    // Check authentication on component mount
+    checkAuthentication();
+
+    // Set up periodic authentication check (every 30 seconds)
+    const authCheckInterval = setInterval(() => {
+      checkAuthentication();
+    }, 30000);
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setIsAuthenticated(false);
+        setUserEmail('');
+        window.location.href = '/admin';
+      } else if (event === 'SIGNED_IN' && session) {
+        setUserEmail(session.user?.email || '');
+        setIsAuthenticated(true);
+      }
+    });
+
+    return () => {
+      clearInterval(authCheckInterval);
+      subscription.unsubscribe();
+    };
+  }, [checkAuthentication]);
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -551,7 +751,7 @@ const AdminPanel: React.FC = () => {
     setIsAddingCategory(false);
   }
 
-  // Handle file input (WebP only) - Multiple files
+  // Handle file input - Multiple files (PNG, JPG, JFIF, WebP)
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files);
@@ -559,11 +759,14 @@ const AdminPanel: React.FC = () => {
       
       // Validate each file
       for (const file of selectedFiles) {
-        if (file.type !== 'image/webp') {
+        const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
+                               file.name.toLowerCase().match(/\.(jfif|jpe)$/);
+        
+        if (!isSupportedType) {
           const isAboutMeCategory = selectedCategory === profilePictureCategory?.id;
           const message = isAboutMeCategory 
-            ? `File "${file.name}" is not a WebP image. About Me images must be in WebP format.`
-            : `File "${file.name}" is not a WebP image. Only WebP images are allowed.`;
+            ? `File "${file.name}" is not a supported image format. About Me images must be PNG, JPG, JFIF, or WebP format.`
+            : `File "${file.name}" is not a supported image format. Only PNG, JPG, JFIF, and WebP images are allowed.`;
           showToast('error', message);
           continue;
         }
@@ -609,6 +812,7 @@ const AdminPanel: React.FC = () => {
       showToast('error', 'Please provide all required fields: files or URL and a category');
       return;
     }
+
 
     if (!isValidUUID(selectedCategory)) {
       showToast('error', 'Please select a valid category');
@@ -668,8 +872,98 @@ const AdminPanel: React.FC = () => {
       }
     }
 
-    // File upload path (WebP-only) - Multiple files
-    if (files.length === 0) { showToast('error', 'Please select WebP files'); return; }
+    // File upload path - Check file types and show conversion prompt
+    if (files.length === 0) { showToast('error', 'Please select image files'); return; }
+
+    // Separate WebP files from files that need conversion
+    const webpFiles = files.filter(file => file.type === 'image/webp');
+    const filesToConvert = files.filter(file => 
+      file.type.match(/^image\/(jpeg|jpg|png)$/) || 
+      file.name.toLowerCase().match(/\.(jfif|jpe)$/)
+    );
+    const unsupportedFiles = files.filter(file => 
+      !file.type.match(/^image\/(jpeg|jpg|png|webp)$/) && 
+      !file.name.toLowerCase().match(/\.(jfif|jpe)$/)
+    );
+
+    // Show error for unsupported files
+    if (unsupportedFiles.length > 0) {
+      showToast('error', `Unsupported file format(s): ${unsupportedFiles.map(f => f.name).join(', ')}. Only PNG, JPG, JFIF, and WebP files are allowed.`);
+      return;
+    }
+
+    // If there are files to convert, show confirmation prompt
+    if (filesToConvert.length > 0) {
+      setFilesToConvert(filesToConvert);
+      setWebpFiles(webpFiles);
+      setShowConversionPrompt(true);
+      return;
+    }
+
+    // If only WebP files, proceed with upload
+    await proceedWithUpload(webpFiles);
+  };
+
+  const handleConversionConfirm = async () => {
+    setShowConversionPrompt(false);
+    setIsConverting(true);
+    setConversionProgress({});
+    
+    try {
+      const convertedFiles: File[] = [];
+      
+      // Convert each file to WebP
+      for (let i = 0; i < filesToConvert.length; i++) {
+        const file = filesToConvert[i];
+        const fileKey = `${file.name}-${i}`;
+        
+        setConversionProgress(prev => ({ ...prev, [fileKey]: 50 }));
+        showToast('info', `Converting ${file.name} to WebP format...`);
+        
+        try {
+          const convertedFile = await convertToWebP(file, 0.8);
+          convertedFiles.push(convertedFile);
+          setConversionProgress(prev => ({ ...prev, [fileKey]: 100 }));
+          showToast('success', `Successfully converted ${file.name} to WebP`);
+        } catch (conversionError) {
+          console.error('Conversion error for', file.name, ':', conversionError);
+          showToast('error', `Failed to convert ${file.name} to WebP. Skipping.`);
+        }
+      }
+      
+      // Combine converted files with existing WebP files
+      const allFiles = [...webpFiles, ...convertedFiles];
+      
+      // Proceed with upload
+      await proceedWithUpload(allFiles);
+      
+    } catch (error) {
+      console.error('Conversion process failed:', error);
+      showToast('error', 'Conversion process failed');
+    } finally {
+      setIsConverting(false);
+      setConversionProgress({});
+      setFilesToConvert([]);
+      setWebpFiles([]);
+    }
+  };
+
+  const handleConversionCancel = () => {
+    setShowConversionPrompt(false);
+    setFilesToConvert([]);
+    setWebpFiles([]);
+    showToast('info', 'Upload cancelled');
+  };
+
+  const proceedWithUpload = async (filesToUpload: File[]) => {
+    if (filesToUpload.length === 0) return;
+
+    // Get the selected category
+    const selectedCategoryData = categories.find(c => c.id === selectedCategory);
+    if (!selectedCategoryData) {
+      showToast('error', 'Selected category not found');
+      return;
+    }
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -677,26 +971,15 @@ const AdminPanel: React.FC = () => {
     
     try {
       const uploadResults = [];
-      const totalFiles = files.length;
+      const totalFiles = filesToUpload.length;
       
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
         const fileKey = `${file.name}-${i}`;
-        
-        // Validate file
-        if (file.type !== 'image/webp') { 
-          showToast('error', `File "${file.name}" is not a WebP image. Skipping.`); 
-          continue; 
-        }
-        const fileExt = file.name.split('.').pop()?.toLowerCase();
-        if (fileExt !== 'webp') { 
-          showToast('error', `File "${file.name}" is not a .webp file. Skipping.`); 
-          continue; 
-        }
 
       // Upload file to Supabase storage under slug folder
-        const fileName = `${Date.now()}-${i}.webp`;
-      const objectPath = `${STORAGE_PREFIX}/${category.slug}/${fileName}`;
+        const finalFileName = `${Date.now()}-${i}.webp`;
+      const objectPath = `${STORAGE_PREFIX}/${selectedCategoryData.slug}/${finalFileName}`;
         
         // Set initial progress for this file
         setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
@@ -738,12 +1021,12 @@ const AdminPanel: React.FC = () => {
           throw new Error(`Failed to retrieve a valid public URL for ${file.name}.`);
         }
 
-        const derivedTitle = title.trim() || category.name_am || (file.name.replace(/\.[^.]+$/, '')) || `Picture ${Date.now()}-${i}`;
+        const derivedTitle = title.trim() || selectedCategoryData.name_am || (file.name.replace(/\.[^.]+$/, '')) || `Picture ${Date.now()}-${i}`;
 
       const { error } = await supabase.from('pictures').insert([{
         title: derivedTitle,
         image_url: publicUrl,
-        category_id: selectedCategory
+          category_id: selectedCategoryData.id
       }]);
 
       if (error) {
@@ -778,14 +1061,17 @@ const AdminPanel: React.FC = () => {
       showToast('error', 'Upload failed: ' + msg);
     } finally {
       setIsUploading(false);
+      setIsConverting(false);
       setUploadProgress(0);
       setUploadProgresses({});
+      setConversionProgress({});
     }
   }
 
   // Delete picture (called from modal)
   async function handleDeletePicture(pictureId: string, imageUrl: string) {
     setDeletingPictureId(pictureId);
+    
     
     try {
       // Derive object path from the public URL
@@ -890,20 +1176,118 @@ const AdminPanel: React.FC = () => {
     }
   }
 
+  // Show loading state while initializing session
+  if (!isAuthenticated) {
   return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900">
+      <div className="min-h-screen pt-20 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 relative overflow-hidden flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-8 h-8 bg-blue-500 rounded-full animate-pulse"></div>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Initializing Session</h2>
+          <p className="text-gray-400">Starting your admin session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pt-20 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 relative overflow-hidden">
+      {/* Animated Background Elements - Reduced on mobile for performance */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="hidden sm:block absolute -top-40 -right-40 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="hidden sm:block absolute -bottom-40 -left-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 sm:w-64 sm:h-64 bg-pink-500/5 rounded-full blur-2xl animate-pulse delay-500"></div>
+      </div>
+
       {/* Header */}
       <section 
         ref={headerRef}
-        className="py-16 text-center"
+        className="relative py-20 text-center"
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-4 tracking-tight">
-            Admin Panel
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+
+          {/* User Profile Card */}
+          {isAuthenticated && userEmail && (
+            <div className="flex justify-center mb-8">
+              <div className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/10">
+                {/* Background Glow Effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                
+                <div className="relative flex items-center gap-4">
+                  {/* Avatar */}
+                  <div className="relative">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
+                      <span className="text-white text-2xl font-bold">
+                        {userEmail.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                    </div>
+                  </div>
+
+                  {/* User Info */}
+                  <div className="text-left flex-1">
+                    <div className="text-white text-lg font-semibold mb-1">{userEmail}</div>
+                    <div className="text-gray-400 text-sm mb-2">Admin User</div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    {/* Home Button */}
+                    <button
+                      onClick={() => window.location.href = '/'}
+                      className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 hover:border-blue-500/50 text-blue-200 hover:text-white rounded-xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                        <span>Home</span>
+                      </div>
+                    </button>
+
+                    {/* Logout Button */}
+                    <button
+                      onClick={handleLogout}
+                      className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 hover:border-red-500/50 text-red-200 hover:text-white rounded-xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/25"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        <span>Logout</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <h1 className="text-5xl sm:text-6xl font-extrabold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent mb-6 tracking-tight">
+            Admin Hub
           </h1>
-          <p className="text-base sm:text-lg text-gray-300 leading-relaxed">
-            Manage categories and upload new pictures
+          <p className="text-xl sm:text-2xl text-gray-300 leading-relaxed max-w-3xl mx-auto mb-8">
+            Manage your visual content with style and precision
           </p>
+          
+          {/* Quick Stats */}
+          <div className="flex flex-wrap justify-center gap-6 mt-12">
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
+              <div className="text-2xl font-bold text-white">{categories.length}</div>
+              <div className="text-sm text-gray-400">Categories</div>
+            </div>
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
+              <div className="text-2xl font-bold text-white">{pictures.length}</div>
+              <div className="text-sm text-gray-400">Pictures</div>
+            </div>
+            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
+              <div className="text-2xl font-bold text-white">{formatBytes(storageUsage.used)}</div>
+              <div className="text-sm text-gray-400">Storage Used</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -912,113 +1296,204 @@ const AdminPanel: React.FC = () => {
       {/* Layout */}
       <section ref={uploadRef} className="pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-4 lg:gap-6">
             {/* Sidebar */}
             <aside className="space-y-6">
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-white font-semibold mb-3">Quick Actions</h3>
+              {/* Quick Actions */}
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-blue-400" />
+                    Quick Actions
+                  </h3>
                 <div className="space-y-3">
-                  <button onClick={() => setEditingCategoryId(null)} className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition">New Category</button>
-                  <button onClick={() => uploadRef.current?.scrollIntoView({ behavior: 'smooth' })} className="w-full px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition">Upload Picture</button>
+                    <button 
+                      onClick={() => setEditingCategoryId(null)} 
+                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Plus className="w-4 h-4" />
+                      New Category
+                    </button>
+                    <button 
+                      onClick={() => uploadRef.current?.scrollIntoView({ behavior: 'smooth' })} 
+                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2 font-semibold"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upload Picture
+                    </button>
                 </div>
               </div>
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-white font-semibold mb-3">Stats</h3>
-                <div className="text-sm text-gray-300 space-y-2">
-                  <div className="flex justify-between"><span>Categories</span><span className="text-white">{categories.length}</span></div>
-                  <div className="flex justify-between"><span>Pictures</span><span className="text-white">{pictures.length}</span></div>
                 </div>
+
+              {/* Enhanced Stats */}
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-purple-400" />
+                    Statistics
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                      <span className="text-sm text-gray-300">Categories</span>
+                      <span className="text-xl font-bold text-white">{categories.length}</span>
               </div>
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-white font-semibold mb-2">Tips</h3>
-                <p className="text-sm text-gray-300">Use the Amharic name for display and the English file name as a safe storage folder.</p>
+                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                      <span className="text-sm text-gray-300">Pictures</span>
+                      <span className="text-xl font-bold text-white">{pictures.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
+                      <span className="text-sm text-gray-300">Storage</span>
+                      <span className="text-lg font-bold text-white">{formatBytes(storageUsage.used)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
               
-              {/* Storage Usage Indicator */}
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  Storage Usage
+              {/* Tips */}
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-3 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-amber-400" />
+                    Pro Tips
+                  </h3>
+                  <div className="space-y-3 text-sm text-gray-300">
+                    <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                      <p className="font-medium text-white mb-1">Naming Convention</p>
+                      <p>Use Amharic for display names and English for file storage.</p>
+                    </div>
+                    <div className="p-3 bg-white/5 rounded-xl border border-white/10">
+                      <p className="font-medium text-white mb-1">WebP Format</p>
+                      <p>All images must be in WebP format for optimal performance.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Enhanced Storage Usage Indicator */}
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                    Storage Analytics
                 </h3>
                 
                 {storageUsage.loading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                    <span className="ml-2 text-sm text-gray-300">Loading...</span>
+                    <div className="flex items-center justify-center py-8">
+                      <div className="relative">
+                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500/30 border-t-blue-500"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Activity className="w-4 h-4 text-blue-400 animate-pulse" />
+                        </div>
+                      </div>
+                      <span className="ml-3 text-sm text-gray-300">Analyzing storage...</span>
                   </div>
                 ) : storageUsage.error ? (
-                  <div className="text-center py-4">
-                    <p className="text-red-400 text-sm mb-2">Error loading storage data</p>
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <X className="w-6 h-6 text-red-400" />
+                      </div>
+                      <p className="text-red-400 text-sm mb-3">Storage analysis failed</p>
                     <button 
                       onClick={fetchStorageUsage}
-                      className="text-xs text-blue-400 hover:text-blue-300 underline"
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
                     >
-                      Retry
+                        Retry Analysis
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {/* Storage Label */}
-                    <div className="text-center">
-                      <p className="text-sm text-gray-300">
-                        Storage Usage: <span className="text-white font-medium">
-                          {formatBytes(storageUsage.used)} / {formatBytes(storageUsage.total)}
-                        </span>
-                      </p>
+                    <div className="space-y-4">
+                      {/* Storage Overview */}
+                      <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
+                        <div className="text-2xl font-bold text-white mb-1">
+                          {formatBytes(storageUsage.used)}
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          of {formatBytes(storageUsage.total)} used
+                        </div>
                     </div>
                     
-                    {/* Progress Bar */}
-                    <div className="w-full">
-                      <div className="w-full bg-slate-800 rounded-full h-3 border border-slate-700 overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-500 ease-out ${
+                      {/* Circular Progress */}
+                      <div className="relative w-24 h-24 mx-auto">
+                        <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            className="text-slate-700"
+                          />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            stroke="currentColor"
+                            strokeWidth="8"
+                            fill="none"
+                            strokeDasharray={`${2 * Math.PI * 40}`}
+                            strokeDashoffset={`${2 * Math.PI * 40 * (1 - getStorageUsagePercentage() / 100)}`}
+                            className={`transition-all duration-1000 ease-out ${
                             getStorageUsagePercentage() >= 90 
-                              ? 'bg-gradient-to-r from-red-500 to-red-600' 
+                                ? 'text-red-500' 
                               : getStorageUsagePercentage() >= 75 
-                                ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
-                                : 'bg-gradient-to-r from-green-500 to-emerald-500'
-                          }`}
-                          style={{ width: `${Math.min(getStorageUsagePercentage(), 100)}%` }}
-                        ></div>
-                      </div>
-                      
-                      {/* Usage Percentage */}
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-xs text-gray-400">
-                          {getStorageUsagePercentage().toFixed(1)}% used
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          {formatBytes(storageUsage.total - storageUsage.used)} remaining
+                                  ? 'text-yellow-500'
+                                  : 'text-emerald-500'
+                            }`}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-lg font-bold text-white">
+                            {getStorageUsagePercentage().toFixed(0)}%
                         </span>
                       </div>
                     </div>
                     
                     {/* Storage Status */}
                     <div className="text-center">
-                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
                         getStorageUsagePercentage() >= 90 
-                          ? 'bg-red-500/20 text-red-400' 
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
                           : getStorageUsagePercentage() >= 75 
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-green-500/20 text-green-400'
-                      }`}>
+                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${
+                            getStorageUsagePercentage() >= 90 
+                              ? 'bg-red-400' 
+                              : getStorageUsagePercentage() >= 75 
+                                ? 'bg-yellow-400'
+                                : 'bg-emerald-400'
+                          }`}></div>
                         {getStorageUsagePercentage() >= 90 
-                          ? 'Storage Almost Full' 
+                            ? 'Storage Critical' 
                           : getStorageUsagePercentage() >= 75 
-                            ? 'Storage Getting Full'
+                              ? 'Storage Warning'
                             : 'Storage Healthy'
                         }
                       </span>
                     </div>
+                      
+                      {/* Remaining Space */}
+                      <div className="text-center text-sm text-gray-400">
+                        {formatBytes(storageUsage.total - storageUsage.used)} remaining
+                    </div>
                   </div>
                 )}
+                </div>
               </div>
 
-              {/* About Me Image Section */}
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl">
-                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                  About Me Image
+              {/* Enhanced About Me Image Section */}
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
+                    Profile Management
                 </h3>
                 
                 {profilePictureLoading ? (
@@ -1143,51 +1618,145 @@ const AdminPanel: React.FC = () => {
                     )}
                   </div>
                 )}
+                </div>
               </div>
             </aside>
 
             {/* Main content */}
             <div className="space-y-8">
-              {/* Category Card */}
-              <div className="relative rounded-3xl">
+              {/* Enhanced Category Management */}
+              <div className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-3xl blur opacity-20" />
-                <div className="relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2"><Plus className="w-6 h-6" />{editingCategoryId ? 'Edit Category' : 'Add New Category'}</h2>
+                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-xl border border-blue-500/30">
+                        <Plus className="w-6 h-6 text-blue-400" />
                   </div>
-                  <form onSubmit={handleAddCategory} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input type="text" value={newCategoryAm} onChange={(e) => setNewCategoryAm(e.target.value)} placeholder="Category name (Amharic)" className="px-4 py-3 rounded-xl bg-slate-800/70 text-white placeholder-gray-400 border border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition" required />
-                    <input type="text" value={newCategorySlug} onChange={(e) => setNewCategorySlug(e.target.value)} placeholder="File name (english, e.g. wedding)" className="px-4 py-3 rounded-xl bg-slate-800/70 text-white placeholder-gray-400 border border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition" required />
-                    <div className="flex gap-3">
-                      <button type="submit" disabled={isAddingCategory} className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:from-blue-900 disabled:to-cyan-900 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-blue-800/30">{editingCategoryId ? (isAddingCategory ? 'Saving...' : 'Save Changes') : (isAddingCategory ? 'Adding...' : 'Add Category')}</button>
+                      <h2 className="text-2xl font-bold text-white">
+                        {editingCategoryId ? 'Edit Category' : 'Create New Category'}
+                      </h2>
+                    </div>
                       {editingCategoryId && (
-                        <button type="button" onClick={() => { setEditingCategoryId(null); setNewCategoryAm(''); setNewCategorySlug(''); }} className="px-6 py-3 rounded-xl font-semibold bg-slate-700 hover:bg-slate-600 text-white transition">Cancel</button>
+                      <button 
+                        onClick={() => { setEditingCategoryId(null); setNewCategoryAm(''); setNewCategorySlug(''); }} 
+                        className="p-2 text-gray-400 hover:text-white transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                       )}
+                    </div>
+                  
+                  <form onSubmit={handleAddCategory} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                          <span>Category Name</span>
+                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">Amharic</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          value={newCategoryAm} 
+                          onChange={(e) => setNewCategoryAm(e.target.value)} 
+                          placeholder="Enter category name in Amharic" 
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
+                          required 
+                        />
+                        <p className="text-xs text-gray-400">This will be displayed to users</p>
+                    </div>
+                      
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                          <span>File Name</span>
+                          <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full">English</span>
+                        </label>
+                        <input 
+                          type="text" 
+                          value={newCategorySlug} 
+                          onChange={(e) => setNewCategorySlug(e.target.value)} 
+                          placeholder="e.g. wedding, portrait, nature" 
+                          className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
+                          required 
+                        />
+                        <p className="text-xs text-gray-400">Used for file storage organization</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      <button 
+                        type="submit" 
+                        disabled={isAddingCategory} 
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:from-blue-900 disabled:to-cyan-900 text-white px-6 py-4 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-blue-800/30 hover:scale-105 flex items-center justify-center gap-2"
+                      >
+                        {isAddingCategory ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
+                            {editingCategoryId ? 'Saving...' : 'Adding...'}
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            {editingCategoryId ? 'Save Changes' : 'Add Category'}
+                          </>
+                        )}
+                      </button>
                     </div>
                   </form>
 
-                  <div className="mt-6 rounded-2xl border border-white/10 bg-slate-900/50">
-                    <div className="grid grid-cols-12 gap-3 px-4 py-3 text-gray-300 text-sm border-b border-white/10">
-                      <div className="col-span-5">Name (Amharic)</div>
-                      <div className="col-span-5">File name</div>
-                      <div className="col-span-2 text-right">Actions</div>
-                    </div>
+                  {/* Enhanced Category List */}
+                  <div className="mt-8 space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <BarChart3 className="w-5 h-5 text-blue-400" />
+                      Categories ({categories.length})
+                    </h3>
+                    
+                    <div className="grid gap-4">
                     {categories.map((cat) => (
-                      <div key={cat.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center border-b border-white/5 last:border-b-0">
-                        <div className="col-span-5"><span className="text-white">{cat.name_am}</span></div>
-                        <div className="col-span-5"><span className="text-gray-300">{cat.slug}</span></div>
-                        <div className="col-span-2 text-right flex justify-end gap-2">
+                        <div key={cat.id} className="group relative overflow-hidden bg-white/5 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-[1.02]">
+                          <div className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="p-2 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg border border-blue-500/30">
+                                    <Camera className="w-4 h-4 text-blue-400" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-lg font-semibold text-white">{cat.name_am}</h4>
+                                    <p className="text-sm text-gray-400 font-mono">{cat.slug}</p>
+                                  </div>
+                                  {isAboutMeCategory(cat) && (
+                                    <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full border border-purple-500/30">
+                                      Profile
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 text-sm text-gray-400">
+                                  <span>{categoryIdToCount[cat.id] || 0} pictures</span>
+                                  <span>•</span>
+                                  <span>Created recently</span>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
                           {isAboutMeCategory(cat) ? (
                             <button 
                               disabled 
-                              className="px-3 py-2 rounded-lg bg-gray-600 cursor-not-allowed text-gray-400 flex items-center gap-1 text-sm"
+                                    className="px-4 py-2 rounded-xl bg-gray-600/50 cursor-not-allowed text-gray-400 flex items-center gap-2 text-sm border border-gray-600/50"
                               title="About Me category cannot be edited"
                             >
-                              <Edit className="w-4 h-4" /> Protected
+                                    <Shield className="w-4 h-4" />
+                                    Protected
                             </button>
                           ) : (
-                          <button onClick={() => { setEditingCategoryId(cat.id); setNewCategoryAm(cat.name_am); setNewCategorySlug(cat.slug); }} className="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1 text-sm"><Edit className="w-4 h-4" /> Edit</button>
-                          )}
+                                  <button 
+                                    onClick={() => { setEditingCategoryId(cat.id); setNewCategoryAm(cat.name_am); setNewCategorySlug(cat.slug); }} 
+                                    className="px-4 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 flex items-center gap-2 text-sm border border-blue-500/30 hover:border-blue-500/50 transition-all duration-300"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                    Edit
+                                  </button>
+                                )}
+                                
                           <button 
                             onClick={() => { 
                               if (isAboutMeCategory(cat)) {
@@ -1205,34 +1774,76 @@ const AdminPanel: React.FC = () => {
                               }
                             }} 
                             disabled={deletingCategoryId === cat.id} 
-                            className={`px-3 py-2 rounded-lg text-white flex items-center gap-1 text-sm ${deletingCategoryId === cat.id ? 'bg-red-800 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'}`}
+                                  className={`px-4 py-2 rounded-xl text-white flex items-center gap-2 text-sm border transition-all duration-300 ${
+                                    deletingCategoryId === cat.id 
+                                      ? 'bg-red-800/50 cursor-not-allowed border-red-600/50' 
+                                      : 'bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/50'
+                                  }`}
                           >
                             {deletingCategoryId === cat.id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                                    <>
+                                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+                                      Deleting...
+                                    </>
                             ) : (
                               <>
-                                <Trash2 className="w-4 h-4" /> Delete
+                                      <Trash2 className="w-4 h-4" />
+                                      Delete
                               </>
                             )}
                           </button>
+                              </div>
+                            </div>
                         </div>
                       </div>
                     ))}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Upload Card */}
-              <div className="relative rounded-3xl">
+              {/* Enhanced Upload Section */}
+              <div className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-3xl blur opacity-20" />
-                <div className="relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-                  <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 flex items-center gap-2"><Upload className="w-6 h-6" /> Upload Picture</h2>
-                  <form onSubmit={handleUpload} className="space-y-5">
-                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Picture title (optional)" className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white placeholder-gray-400 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition" />
-                    <select value={selectedCategory} onChange={(e) => { const value = e.target.value; if (value === '' || isValidUUID(value)) { setSelectedCategory(value); } }} className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition" required>
-                      <option value="">Select Category</option>
-                      {categories.filter(cat => !isAboutMeCategory(cat)).map(cat => (<option key={cat.id} value={cat.id}>{cat.name_am} ({cat.slug})</option>))}
+                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-3 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl border border-emerald-500/30">
+                      <Upload className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">Upload Pictures</h2>
+                  </div>
+                  <form onSubmit={handleUpload} className="space-y-6">
+                    {/* Title Input */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-300">Picture Title (Optional)</label>
+                      <input 
+                        type="text" 
+                        value={title} 
+                        onChange={(e) => setTitle(e.target.value)} 
+                        placeholder="Enter a descriptive title for your pictures" 
+                        className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
+                      />
+                      <p className="text-xs text-gray-400">Leave empty to use category name as title</p>
+                    </div>
+                    
+                    {/* Category Selection */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-300">Select Category</label>
+                      <select 
+                        value={selectedCategory} 
+                        onChange={(e) => { const value = e.target.value; if (value === '' || isValidUUID(value)) { setSelectedCategory(value); } }} 
+                        className="w-full px-4 py-3 rounded-xl bg-slate-800 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-slate-700" 
+                        required
+                      >
+                        <option value="" className="bg-slate-800 text-white">Choose a category for your pictures</option>
+                        {categories.filter(cat => !isAboutMeCategory(cat)).map(cat => (
+                          <option key={cat.id} value={cat.id} className="bg-slate-800 text-white">
+                            {cat.name_am} ({cat.slug})
+                          </option>
+                        ))}
                     </select>
+                      <p className="text-xs text-gray-400">Pictures will be organized under the selected category</p>
+                    </div>
                     <div className="relative">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-gray-300 text-sm">Upload via URL (WebP only)</span>
@@ -1256,11 +1867,11 @@ const AdminPanel: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} accept=".webp,image/webp" className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700" required />
+                          <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} accept=".webp,.jpg,.jpeg,.png,.jfif,.jpe,image/webp,image/jpeg,image/png" className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700" required />
                           <p className="text-xs text-gray-400 mt-1">
                             {selectedCategory === profilePictureCategory?.id 
-                              ? "About Me images must be in WebP format. Only one image is allowed."
-                              : "Only WebP format images are allowed. You can select multiple files."
+                              ? "PNG, JPG, JFIF, and WebP images are supported. Images will be automatically converted to WebP format. Only one image is allowed."
+                              : "PNG, JPG, JFIF, and WebP images are supported. Images will be automatically converted to WebP format. You can select multiple files."
                             }
                           </p>
                           
@@ -1315,16 +1926,41 @@ const AdminPanel: React.FC = () => {
                             <p className="text-xs text-gray-400">Individual files:</p>
                             {files.map((file, index) => {
                               const fileKey = `${file.name}-${index}`;
-                              const progress = uploadProgresses[fileKey] || 0;
+                              const uploadProgress = uploadProgresses[fileKey] || 0;
+                              const conversionProgressValue = conversionProgress[fileKey] || 0;
+                              const isConverting = conversionProgressValue > 0 && conversionProgressValue < 100;
+                              const isUploading = uploadProgress > 0;
+                              
                               return (
                                 <div key={fileKey} className="space-y-1">
                                   <div className="flex justify-between items-center">
                                     <span className="text-xs text-gray-300 truncate max-w-[200px]">{file.name}</span>
-                                    <span className="text-xs text-gray-400">{Math.round(progress)}%</span>
+                                    <div className="flex items-center gap-2">
+                                      {isConverting && (
+                                        <span className="text-xs text-amber-400">Converting...</span>
+                                      )}
+                                      {isUploading && !isConverting && (
+                                        <span className="text-xs text-blue-400">Uploading...</span>
+                                      )}
+                                      <span className="text-xs text-gray-400">
+                                        {isConverting ? Math.round(conversionProgressValue) : Math.round(uploadProgress)}%
+                                      </span>
                                   </div>
+                                  </div>
+                                  
+                                  {/* Conversion Progress */}
+                                  {isConverting && (
                                   <div className="w-full bg-slate-800/50 rounded-full h-1 border border-slate-700/50">
-                                    <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1 rounded-full transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
+                                      <div className="bg-gradient-to-r from-amber-500 to-orange-400 h-1 rounded-full transition-all duration-300 ease-out" style={{ width: `${conversionProgressValue}%` }}></div>
                                   </div>
+                                  )}
+                                  
+                                  {/* Upload Progress */}
+                                  {isUploading && (
+                                    <div className="w-full bg-slate-800/50 rounded-full h-1 border border-slate-700/50">
+                                      <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1332,92 +1968,179 @@ const AdminPanel: React.FC = () => {
                     )}
                       </div>
                     )}
-                    <button type="submit" disabled={isUploading || !selectedCategory || (!useUrlUpload && files.length === 0) || (useUrlUpload && !imageUrl)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:from-emerald-900 disabled:to-teal-900 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-emerald-800/30">{isUploading && !useUrlUpload ? (<><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>Uploading...</>) : (<><Upload className="w-4 h-4" />{useUrlUpload ? 'Add from URL' : files.length > 1 ? `Upload ${files.length} Pictures` : 'Upload Picture'}</>)}</button>
+                    <button type="submit" disabled={isUploading || isConverting || !selectedCategory || (!useUrlUpload && files.length === 0) || (useUrlUpload && !imageUrl)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:from-emerald-900 disabled:to-teal-900 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-emerald-800/30">
+                      {isConverting ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Converting to WebP...
+                        </>
+                      ) : isUploading && !useUrlUpload ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          {useUrlUpload ? 'Add from URL' : files.length > 1 ? `Upload ${files.length} Pictures` : 'Upload Picture'}
+                        </>
+                      )}
+                    </button>
                   </form>
                 </div>
               </div>
 
-              {/* Gallery */}
-              <div ref={gridRef} className="relative rounded-3xl">
+              {/* Enhanced Gallery */}
+              <div ref={gridRef} className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 rounded-3xl blur opacity-10" />
-                <div className="relative bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                    <h2 className="text-2xl font-bold text-white">Gallery ({pictures.length})</h2>
-                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-gradient-to-br from-fuchsia-500/20 to-purple-500/20 rounded-xl border border-fuchsia-500/30">
+                        <Camera className="w-6 h-6 text-fuchsia-400" />
+                      </div>
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">Visual Gallery</h2>
+                        <p className="text-sm text-gray-400">{pictures.length} pictures across {categories.length} categories</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <select
                         value={sortMode}
-                        onChange={(e) => setSortMode(e.target.value as any)}
-                        className="px-4 py-2.5 rounded-xl bg-slate-800/70 text-white border border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition"
+                        onChange={(e) => handleSortChange(e.target.value as any)}
+                        className="px-4 py-3 rounded-xl bg-slate-800 text-white border border-slate-700 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 focus:outline-none transition-all duration-300 hover:bg-slate-700"
                       >
-                        <option value="newest">Newest</option>
-                        <option value="oldest">Oldest</option>
-                        <option value="title">Title A–Z</option>
+                        <option value="newest" className="bg-slate-800 text-white">🕒 Newest First</option>
+                        <option value="oldest" className="bg-slate-800 text-white">🕐 Oldest First</option>
+                        <option value="title" className="bg-slate-800 text-white">🔤 Alphabetical</option>
                       </select>
                     </div>
                   </div>
-                  {/* Category Filters inside Gallery */}
-                  <div className="mb-6 flex flex-wrap gap-3 justify-center">
+                  {/* Enhanced Category Filters */}
+                  <div className="mb-8">
+                    <h3 className="text-sm font-medium text-gray-300 mb-4 text-center">Filter by Category</h3>
+                    <div className="flex flex-wrap gap-2 sm:gap-3 justify-center px-2 sm:px-0">
                     <button
-                      onClick={() => setSelectedFilterCategoryId('')}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                        onClick={() => handleCategoryFilter('')}
+                        className={`group relative overflow-hidden px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-300 border-2 flex items-center gap-2 sm:gap-3 touch-manipulation ${
                         selectedFilterCategoryId === ''
-                          ? 'bg-blue-600/90 text-white border-blue-500 shadow-lg'
-                          : 'bg-slate-800/70 text-gray-200 border-slate-700 hover:bg-slate-700/70'
-                      }`}
-                    >
-                      All ({pictures.filter(pic => !pic.categories || !isAboutMeCategory(pic.categories)).length})
+                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-blue-500 shadow-lg scale-105'
+                            : 'bg-white/5 text-gray-200 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95 sm:hover:scale-105'
+                        }`}
+                      >
+                        <div className="p-2 bg-white/20 rounded-lg">
+                          <Camera className="h-4 w-4" />
+                        </div>
+                        <span>All Pictures</span>
+                        <span className="px-2 py-1 bg-white/20 rounded-full text-xs">
+                          {pictures.filter(pic => !pic.categories || !isAboutMeCategory(pic.categories)).length}
+                        </span>
                     </button>
+                      
                     {categories.filter(cat => !isAboutMeCategory(cat)).map((cat) => {
                       const preview = categoryIdToPreview[cat.id] || '';
                       const count = categoryIdToCount[cat.id] || 0;
                       return (
                         <button
                           key={cat.id}
-                          onClick={() => setSelectedFilterCategoryId(cat.id)}
-                          className={`group relative overflow-hidden px-4 py-2 rounded-full text-sm font-medium transition-all border flex items-center gap-2 ${
+                            onClick={() => handleCategoryFilter(cat.id)}
+                            className={`group relative overflow-hidden px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-300 border-2 flex items-center gap-2 sm:gap-3 touch-manipulation ${
                             selectedFilterCategoryId === cat.id
-                              ? 'bg-blue-600/90 text-white border-blue-500 shadow-lg'
-                              : 'bg-slate-800/70 text-gray-200 border-slate-700 hover:bg-slate-700/70'
+                                ? 'bg-gradient-to-r from-fuchsia-600 to-purple-500 text-white border-fuchsia-500 shadow-lg scale-105'
+                                : 'bg-white/5 text-gray-200 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95 sm:hover:scale-105'
                           }`}
                           title={cat.name_am}
                         >
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full overflow-hidden bg-gradient-to-br from-blue-600/40 to-cyan-500/40 border border-white/10">
+                            <div className="relative h-8 w-8 rounded-lg overflow-hidden bg-gradient-to-br from-fuchsia-600/40 to-purple-500/40 border border-white/10">
                             {preview ? (
-                              <img src={preview} alt={cat.name_am} className="h-full w-full object-cover" />
+                              <OptimizedImage src={preview} alt={cat.name_am} className="h-full w-full object-cover" />
                             ) : (
-                              <Camera className="h-3.5 w-3.5 text-blue-300" />
+                                <div className="h-full w-full flex items-center justify-center">
+                                  <Camera className="h-4 w-4 text-fuchsia-300" />
+                                </div>
                             )}
+                            </div>
+                            <span className="truncate max-w-[8rem]">{cat.name_am}</span>
+                            <span className="px-2 py-1 bg-white/20 rounded-full text-xs">
+                              {count}
                           </span>
-                          <span className="truncate max-w-[10rem]">{cat.name_am} ({count})</span>
                         </button>
                       );
                     })}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {pictures
-                      .filter(pic => {
-                        // Filter out pictures from About Me category
-                        if (pic.categories && isAboutMeCategory(pic.categories)) {
-                          return false;
-                        }
-                        // Apply category filter
-                        return !selectedFilterCategoryId || pic.categories?.id === selectedFilterCategoryId;
-                      })
-                      .sort((a, b) => {
-                        if (sortMode === 'title') return a.title.localeCompare(b.title);
-                        // Newest/Oldest fallback by id/time-based UUID ordering is unreliable; keep as-is
-                        return 0;
-                      })
-                      .map((pic, index) => (
-                      <div key={pic.id} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 backdrop-blur hover:border-white/20 transition-all duration-300 shadow hover:shadow-2xl" onClick={() => { setLightboxIndex(index); setLightboxOpen(true); }}>
-                        <img src={pic.image_url} alt={pic.title} className="aspect-square w-full h-full object-cover transition-all duration-300 group-hover:scale-105" loading="lazy" />
-                        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/25 transition-all duration-300"></div>
-                        <div className="absolute inset-0 flex flex-col justify-end p-4">
-                          <h3 className="text-white font-semibold text-lg mb-1 line-clamp-1">{pic.title}</h3>
-                          <p className="text-gray-200/90 text-sm line-clamp-1">{pic.categories?.name_am}</p>
                         </div>
-                        <div className="absolute top-3 left-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-3 py-1 rounded-full text-xs font-medium">{pic.categories?.name_am}</div>
-                        <button onClick={(e) => { e.stopPropagation(); setIsDeletePicModalOpen(true); setDeleteTargetPictureId(pic.id); setDeleteTargetPictureUrl(pic.image_url); }} disabled={deletingPictureId === pic.id} className={`absolute top-3 right-3 text-white p-2 rounded-full transition-all duration-300 ${deletingPictureId === pic.id ? 'bg-red-800/80 cursor-not-allowed' : 'bg-red-600/80 hover:bg-red-700/80'} shadow`}>{deletingPictureId === pic.id ? (<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>) : (<Trash2 className="w-4 h-4" />)}</button>
+                  {/* Enhanced Gallery Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-6">
+                    {filteredPictures.map((pic, index) => (
+                      <div 
+                        key={pic.id} 
+                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur hover:border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl sm:hover:scale-105" 
+                        onClick={() => handleImageClick(index)}
+                      >
+                          {/* Image Container */}
+                          <div className="relative aspect-square overflow-hidden">
+                            <OptimizedImage 
+                              src={pic.image_url} 
+                              alt={pic.title} 
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110" 
+                            />
+                            
+                            {/* Gradient Overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                            
+                            {/* Category Badge */}
+                            <div className="absolute top-3 left-3">
+                              <span className="px-3 py-1 bg-gradient-to-r from-fuchsia-600/90 to-purple-500/90 text-white rounded-full text-xs font-semibold backdrop-blur-sm">
+                                {pic.categories?.name_am}
+                              </span>
+                        </div>
+                            
+                            {/* Delete Button */}
+                            <button 
+                              onClick={(e) => { 
+                                e.preventDefault();
+                                e.stopPropagation(); 
+                                handleDeleteClick(pic.id, pic.image_url);
+                              }} 
+                              onMouseDown={(e) => e.stopPropagation()}
+                              disabled={deletingPictureId === pic.id} 
+                              className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-300 shadow-lg z-10 ${
+                                deletingPictureId === pic.id 
+                                  ? 'bg-red-800/80 cursor-not-allowed' 
+                                  : 'bg-red-600/80 hover:bg-red-700/80 hover:scale-110'
+                              }`}
+                            >
+                              {deletingPictureId === pic.id ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
+                              ) : (
+                                <Trash2 className="w-4 h-4 text-white" />
+                              )}
+                            </button>
+                            
+                            {/* Hover Overlay */}
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                              <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
+                                <Eye className="w-6 h-6 text-white" />
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Content */}
+                          <div className="p-4">
+                            <h3 className="text-white font-semibold text-lg mb-2 line-clamp-1 group-hover:text-fuchsia-300 transition-colors">
+                              {pic.title}
+                            </h3>
+                            <div className="flex items-center justify-between text-sm text-gray-400">
+                              <span className="flex items-center gap-1">
+                                <Camera className="w-3 h-3" />
+                                {pic.categories?.name_am}
+                              </span>
+                              <span className="text-xs bg-white/10 px-2 py-1 rounded-full">
+                                WebP
+                              </span>
+                            </div>
+                          </div>
                       </div>
                     ))}
                   </div>
@@ -1440,11 +2163,7 @@ const AdminPanel: React.FC = () => {
           open={lightboxOpen}
           close={() => setLightboxOpen(false)}
           index={lightboxIndex}
-          slides={pictures.map(pic => ({ 
-            src: pic.image_url, 
-            title: pic.title, 
-            description: pic.categories?.name_am 
-          }))}
+          slides={lightboxSlides}
           on={{ view: ({ index }) => setLightboxIndex(index) }}
           plugins={[Fullscreen, Zoom, Slideshow]}
           slideshow={{ delay: 8000 }}
@@ -1452,7 +2171,7 @@ const AdminPanel: React.FC = () => {
             slideHeader: () => (
               <div className="absolute top-4 left-4 z-50">
                 <div className="text-white text-sm sm:text-base font-semibold bg-black/60 rounded px-3 py-1">
-                  {lightboxIndex + 1} / {pictures.length}
+                  {lightboxIndex + 1} / {filteredPictures.length}
                 </div>
               </div>
             )
@@ -1751,11 +2470,11 @@ const AdminPanel: React.FC = () => {
                   ref={profileFileInputRef}
                   type="file"
                   onChange={handleProfileFileChange}
-                  accept=".webp,image/webp"
+                  accept=".webp,.jpg,.jpeg,.png,.jfif,.jpe,image/webp,image/jpeg,image/png"
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  About Me images must be in WebP format. Only one image is allowed.
+                  PNG, JPG, JFIF, and WebP images are supported. Images will be automatically converted to WebP format. Only one image is allowed.
                 </p>
               </div>
 
@@ -1820,6 +2539,7 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
+
 
       {/* Toasts */}
       <div className="fixed top-4 right-4 z-[100] space-y-2">
@@ -1898,8 +2618,74 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Conversion Confirmation Modal */}
+      {showConversionPrompt && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full border border-slate-700">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Convert Images to WebP</h3>
+              <p className="text-gray-300 mb-4">
+                You have selected {filesToConvert.length} image(s) that need to be converted to WebP format before uploading.
+              </p>
+              <div className="bg-slate-700/50 rounded-lg p-4 mb-4">
+                <p className="text-sm text-gray-300 mb-2">Files to convert:</p>
+                <div className="space-y-1">
+                  {filesToConvert.map((file, index) => (
+                    <div key={index} className="text-xs text-gray-400 flex items-center gap-2">
+                      <div className="w-2 h-2 bg-amber-400 rounded-full"></div>
+                      {file.name} ({file.type})
+                    </div>
+                  ))}
+                </div>
+                {webpFiles.length > 0 && (
+                  <>
+                    <p className="text-sm text-gray-300 mb-2 mt-3">WebP files (ready to upload):</p>
+                    <div className="space-y-1">
+                      {webpFiles.map((file, index) => (
+                        <div key={index} className="text-xs text-gray-400 flex items-center gap-2">
+                          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                          {file.name}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="text-sm text-gray-400">
+                WebP format provides better compression and faster loading times. The conversion will happen automatically.
+              </p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={handleConversionCancel}
+                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConversionConfirm}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-500 hover:from-amber-500 hover:to-orange-400 text-white rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Convert & Upload
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
+});
+
+AdminPanel.displayName = 'AdminPanel';
 
 export default AdminPanel;
