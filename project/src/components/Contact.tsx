@@ -263,37 +263,27 @@ const Contact: React.FC = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Telegram message sending function
-  const botToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
-  const chatIds = import.meta.env.VITE_TELEGRAM_CHAT_IDS?.split(",") || [];
-
+  // Telegram message sending function using Netlify function
   const sendTelegramMessage = async (message: string) => {
-    // Check if Telegram is configured
-    if (!botToken || !chatIds.length) {
-      console.log("Telegram not configured, skipping notification");
-      return;
-    }
-
     try {
-      for (const chatId of chatIds) {
-        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: chatId.trim(),
-            text: message,
-            parse_mode: "Markdown"
-          })
-        });
+      const response = await fetch("/.netlify/functions/sendTelegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: message,
+          parse_mode: "Markdown",
+          disable_web_page_preview: true,
+          disable_notification: false
+        })
+      });
 
-        if (!res.ok) {
-          console.error(`Telegram API error for chat ${chatId}:`, res.status, res.statusText);
-          continue; // Continue with other chat IDs even if one fails
-        }
-
-        const data = await res.json();
-        console.log("Telegram response for", chatId, ":", data);
+      if (!response.ok) {
+        console.error("Netlify function error:", response.status, response.statusText);
+        return;
       }
+
+      const data = await response.json();
+      console.log("Telegram function response:", data);
     } catch (error) {
       console.error("Error sending Telegram message:", error);
       // Don't throw error - let form submission continue
