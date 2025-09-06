@@ -137,52 +137,194 @@ const Contact: React.FC = () => {
 
   return (
     <div className="min-h-screen pt-20">
-      {/* Hidden static form for Netlify detection at build time */}
-      <form name="contact" data-netlify="true" data-netlify-honeypot="bot-field" style={{ display: 'none' }}>
-        <input type="hidden" name="form-name" value="contact" />
-        <p>
-          <label>
-            Don't fill this out if you're human: <input name="bot-field" />
-          </label>
-        </p>
-        <p>
-          <label>
-            Name: <input type="text" name="name" />
-          </label>
-        </p>
-        <p>
-          <label>
-            Email: <input type="email" name="email" />
-          </label>
-        </p>
-        <p>
-          <label>
-            Phone: <input type="tel" name="phone" />
-          </label>
-        </p>
-        <p>
-          <label>
-            Service: <select name="service">
-              <option value="">Select a service</option>
-              <option value="wedding">Wedding Photography</option>
-              <option value="portrait">Portrait Session</option>
-              <option value="Street photography">Street photography</option>
-              <option value="Real estate photography">Real estate photography</option>
-              <option value="other">Other</option>
-            </select>
-          </label>
-        </p>
-        <p>
-          <label>
-            Date: <input type="date" name="date" />
-          </label>
-        </p>
-        <p>
-          <label>
-            Message: <textarea name="message"></textarea>
-          </label>
-        </p>
-      </form>
+      {/* Static noscript form for users without JavaScript */}
+      <noscript>
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0, 
+          backgroundColor: 'rgba(0,0,0,0.9)', 
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{ 
+            backgroundColor: '#1e293b', 
+            padding: '40px', 
+            borderRadius: '20px', 
+            maxWidth: '500px', 
+            width: '100%',
+            color: 'white'
+          }}>
+            <h2 style={{ fontSize: '24px', marginBottom: '20px', textAlign: 'center' }}>
+              Contact Form (JavaScript Disabled)
+            </h2>
+            <p style={{ marginBottom: '20px', textAlign: 'center', color: '#94a3b8' }}>
+              JavaScript is disabled. Please use this form to contact us:
+            </p>
+            <form 
+              name="contact" 
+              method="POST" 
+              data-netlify="true" 
+              data-netlify-honeypot="bot-field"
+              action="/"
+              style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
+            >
+              <input type="hidden" name="form-name" value="contact" />
+              <p style={{ display: 'none' }}>
+                <label>
+                  Don't fill this out if you're human: <input name="bot-field" />
+                </label>
+              </p>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Full Name *
+                </label>
+                <input 
+                  type="text" 
+                  name="name" 
+                  required 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Email Address *
+                </label>
+                <input 
+                  type="email" 
+                  name="email" 
+                  required 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Phone Number
+                </label>
+                <input 
+                  type="tel" 
+                  name="phone" 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Service Interested In
+                </label>
+                <select 
+                  name="service" 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px'
+                  }}
+                >
+                  <option value="">Select a service</option>
+                  <option value="wedding">Wedding Photography</option>
+                  <option value="portrait">Portrait Session</option>
+                  <option value="Street photography">Street photography</option>
+                  <option value="Real estate photography">Real estate photography</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Preferred Date
+                </label>
+                <input 
+                  type="date" 
+                  name="date" 
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px'
+                  }}
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Message *
+                </label>
+                <textarea 
+                  name="message" 
+                  required 
+                  rows={4}
+                  style={{ 
+                    width: '100%', 
+                    padding: '12px', 
+                    backgroundColor: '#334155', 
+                    border: '1px solid #475569', 
+                    borderRadius: '8px', 
+                    color: 'white',
+                    fontSize: '16px',
+                    resize: 'vertical'
+                  }}
+                ></textarea>
+              </div>
+              
+              <button 
+                type="submit" 
+                style={{ 
+                  backgroundColor: '#2563eb', 
+                  color: 'white', 
+                  padding: '15px', 
+                  border: 'none', 
+                  borderRadius: '8px', 
+                  fontSize: '16px', 
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  marginTop: '10px'
+                }}
+              >
+                Send Message
+              </button>
+            </form>
+          </div>
+        </div>
+      </noscript>
       {/* Header */}
       <section className="py-20 text-center">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
