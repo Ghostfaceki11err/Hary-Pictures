@@ -269,12 +269,7 @@ const Contact: React.FC = () => {
       const response = await fetch("/.netlify/functions/sendTelegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: message,
-          parse_mode: "Markdown",
-          disable_web_page_preview: true,
-          disable_notification: false
-        })
+        body: JSON.stringify({ message })
       });
 
       if (!response.ok) {
@@ -284,8 +279,15 @@ const Contact: React.FC = () => {
 
       const data = await response.json();
       console.log("Telegram function response:", data);
+      
+      if (data.results) {
+        console.log(`Message sent to ${data.results.success.length} chat(s)`);
+        if (data.results.failed.length > 0) {
+          console.warn(`Failed to send to ${data.results.failed.length} chat(s):`, data.results.failed);
+        }
+      }
     } catch (error) {
-      console.error("Error sending Telegram message:", error);
+      console.error("Error calling Telegram function:", error);
       // Don't throw error - let form submission continue
     }
   };

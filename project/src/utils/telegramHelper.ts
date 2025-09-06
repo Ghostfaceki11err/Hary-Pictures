@@ -19,44 +19,35 @@ interface TelegramConfig {
 }
 
 class TelegramHelper {
-  constructor(_config: TelegramConfig) {
-    // Bot token and chat IDs are now handled by the Netlify function
-    // These parameters are kept for backward compatibility but not used
+  private botToken: string;
+  private defaultChatIds: string[];
+
+  constructor(config: TelegramConfig) {
+    this.botToken = config.botToken;
+    this.defaultChatIds = config.defaultChatIds;
   }
 
   /**
-   * Send a message to a single chat ID using Netlify function
+   * Send a message to a single chat ID
    */
   async sendMessage(message: TelegramMessage): Promise<TelegramResponse> {
     try {
-      const response = await fetch('/.netlify/functions/sendTelegram', {
+      const response = await fetch(`https://api.telegram.org/bot${this.botToken}/sendMessage`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: message.text,
+          chat_id: message.chat_id,
+          text: message.text,
           parse_mode: message.parse_mode || 'HTML',
           disable_web_page_preview: message.disable_web_page_preview || false,
           disable_notification: message.disable_notification || false,
         }),
       });
 
-      if (!response.ok) {
-        return {
-          ok: false,
-          error_code: response.status,
-          description: `HTTP ${response.status}: ${response.statusText}`,
-        };
-      }
-
       const data = await response.json();
-      return {
-        ok: data.success,
-        result: data.results,
-        error_code: data.success ? undefined : -1,
-        description: data.message,
-      };
+      return data;
     } catch (error) {
       console.error('Error sending Telegram message:', error);
       return {
@@ -68,49 +59,46 @@ class TelegramHelper {
   }
 
   /**
-   * Send a message to multiple chat IDs using Netlify function
+   * Send a message to multiple chat IDs
    */
   async sendToMultipleChats(
     text: string,
-    _chatIds?: string[],
+    chatIds?: string[],
     options?: Partial<TelegramMessage>
   ): Promise<{ success: string[]; failed: { chatId: string; error: string }[] }> {
-    try {
-      const response = await fetch('/.netlify/functions/sendTelegram', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: text,
-          parse_mode: options?.parse_mode || 'HTML',
-          disable_web_page_preview: options?.disable_web_page_preview || false,
-          disable_notification: options?.disable_notification || false,
-        }),
-      });
+    const targetChatIds = chatIds || this.defaultChatIds;
+    const results = {
+      success: [] as string[],
+      failed: [] as { chatId: string; error: string }[],
+    };
 
-      if (!response.ok) {
-        return {
-          success: [],
-          failed: [{
-            chatId: 'all',
-            error: `HTTP ${response.status}: ${response.statusText}`,
-          }],
-        };
-      }
+    // Send messages in parallel
+    const promises = targetChatIds.map(async (chatId) => {
+      try {
+        const response = await this.sendMessage({
+          chat_id: chatId,
+          text,
+          ...options,
+        });
 
-      const data = await response.json();
-      return data.results || { success: [], failed: [] };
-    } catch (error) {
-      console.error('Error sending Telegram message to multiple chats:', error);
-      return {
-        success: [],
-        failed: [{
-          chatId: 'all',
+        if (response.ok) {
+          results.success.push(chatId);
+        } else {
+          results.failed.push({
+            chatId,
+            error: response.description || 'Unknown error',
+          });
+        }
+      } catch (error) {
+        results.failed.push({
+          chatId,
           error: error instanceof Error ? error.message : 'Unknown error',
-        }],
-      };
-    }
+        });
+      }
+    });
+
+    await Promise.all(promises);
+    return results;
   }
 
   /**
@@ -250,30 +238,13 @@ ${context ? `📍 <b>Context:</b> ${context}` : ''}
   }
 
   /**
-   * Test the bot connection using Netlify function
+   * Test the bot connection
    */
   async testConnection(): Promise<boolean> {
     try {
-      // Send a test message to check if the function works
-      const response = await fetch('/.netlify/functions/sendTelegram', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: '🔧 Test message - Telegram connection working!',
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true,
-          disable_notification: true,
-        }),
-      });
-
-      if (!response.ok) {
-        return false;
-      }
-
+      const response = await fetch(`https://api.telegram.org/bot${this.botToken}/getMe`);
       const data = await response.json();
-      return data.success;
+      return data.ok;
     } catch (error) {
       console.error('Telegram bot connection test failed:', error);
       return false;
@@ -281,10 +252,12 @@ ${context ? `📍 <b>Context:</b> ${context}` : ''}
   }
 }
 
-// Create a default instance (bot token and chat IDs are now handled by the Netlify function)
+// Create a default instance (you'll need to set your bot token and chat IDs)
+// Note: This helper is now deprecated in favor of the Netlify function
+// The bot token and chat IDs are now handled server-side for security
 export const telegramHelper = new TelegramHelper({
-  botToken: '', // No longer needed in frontend
-  defaultChatIds: [], // No longer needed in frontend
+  botToken: '', // No longer used - handled by Netlify function
+  defaultChatIds: [], // No longer used - handled by Netlify function
 });
 
 // Export the class for custom instances

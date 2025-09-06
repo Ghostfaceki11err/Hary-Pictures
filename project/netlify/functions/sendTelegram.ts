@@ -1,11 +1,8 @@
 import { Handler } from '@netlify/functions';
 
 interface TelegramMessage {
-  chat_id: string;
-  text: string;
-  parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2';
-  disable_web_page_preview?: boolean;
-  disable_notification?: boolean;
+  message: string;
+  chatIds?: string[];
 }
 
 interface TelegramResponse {
@@ -15,151 +12,104 @@ interface TelegramResponse {
   description?: string;
 }
 
-interface RequestBody {
-  message: string;
-  parse_mode?: 'HTML' | 'Markdown' | 'MarkdownV2';
-  disable_web_page_preview?: boolean;
-  disable_notification?: boolean;
-}
-
-export const handler: Handler = async (event, context) => {
+const handler: Handler = async (event, context) => {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
 
-  // Handle CORS preflight requests
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      },
-      body: '',
-    };
-  }
-
   try {
-    // Get environment variables
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatIds = process.env.TELEGRAM_CHAT_IDS;
-
-    // Check if Telegram is configured
-    if (!botToken || !chatIds) {
-      console.log('Telegram not configured, skipping notification');
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          success: true, 
-          message: 'Telegram not configured, notification skipped' 
-        }),
-      };
-    }
-
     // Parse request body
-    const body: RequestBody = JSON.parse(event.body || '{}');
-    const { message, parse_mode = 'Markdown', disable_web_page_preview = true, disable_notification = false } = body;
+    const { message, chatIds }: TelegramMessage = JSON.parse(event.body || '{}');
 
     if (!message) {
       return {
         statusCode: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ error: 'Message is required' }),
       };
     }
 
-    // Parse chat IDs
-    const chatIdList = chatIds.split(',').map(id => id.trim()).filter(Boolean);
+    // Get environment variables
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const defaultChatIds = process.env.TELEGRAM_CHAT_IDS?.split(',').filter(Boolean) || [];
 
-    if (chatIdList.length === 0) {
+    if (!botToken) {
+      console.error('TELEGRAM_BOT_TOKEN not configured');
       return {
-        statusCode: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ error: 'No valid chat IDs configured' }),
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Telegram bot token not configured' }),
       };
     }
 
-    // Send messages to all chat IDs
-    const results = {
-      success: [] as string[],
-      failed: [] as { chatId: string; error: string }[],
+    // Use provided chatIds or fall back to default ones
+    const targetChatIds = chatIds && chatIds.length > 0 ? chatIds : defaultChatIds;
+
+    if (targetChatIds.length === 0) {
+      console.error('No chat IDs configured');
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'No chat IDs configured' }),
+      };
+    }
+
+    // Send message to all chat IDs
+    const results: { success: string[]; failed: { chatId: string; error: string }[] } = {
+      success: [],
+      failed: []
     };
 
-    for (const chatId of chatIdList) {
+    for (const chatId of targetChatIds) {
       try {
-        const telegramMessage: TelegramMessage = {
-          chat_id: chatId,
-          text: message,
-          parse_mode,
-          disable_web_page_preview,
-          disable_notification,
-        };
-
         const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(telegramMessage),
+          body: JSON.stringify({
+            chat_id: chatId.trim(),
+            text: message,
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+          }),
         });
 
         const data: TelegramResponse = await response.json();
 
         if (data.ok) {
           results.success.push(chatId);
-          console.log(`Telegram message sent successfully to chat ${chatId}`);
+          console.log(`Message sent successfully to chat ${chatId}`);
         } else {
           results.failed.push({
             chatId,
-            error: data.description || 'Unknown error',
+            error: data.description || 'Unknown error'
           });
-          console.error(`Telegram API error for chat ${chatId}:`, data.error_code, data.description);
+          console.error(`Failed to send message to chat ${chatId}:`, data.description);
         }
       } catch (error) {
         results.failed.push({
           chatId,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : 'Unknown error'
         });
-        console.error(`Error sending Telegram message to chat ${chatId}:`, error);
+        console.error(`Error sending message to chat ${chatId}:`, error);
       }
     }
 
     // Return results
-    const hasSuccess = results.success.length > 0;
-    const statusCode = hasSuccess ? 200 : 500;
-
     return {
-      statusCode,
+      statusCode: 200,
       headers: {
-        'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
       body: JSON.stringify({
-        success: hasSuccess,
+        success: true,
         results,
-        message: hasSuccess 
-          ? `Messages sent to ${results.success.length} chat(s)` 
-          : 'Failed to send messages to any chat',
+        message: `Message sent to ${results.success.length} chat(s), failed for ${results.failed.length} chat(s)`
       }),
     };
 
@@ -167,14 +117,13 @@ export const handler: Handler = async (event, context) => {
     console.error('Error in sendTelegram function:', error);
     return {
       statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error'
       }),
     };
   }
 };
+
+// Handle preflight requests
+export { handler };
