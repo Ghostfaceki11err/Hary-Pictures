@@ -1,16 +1,48 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Camera, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import Slideshow from 'yet-another-react-lightbox/plugins/slideshow';
+import { supabase } from '../admin/supabaseClient';
+
+// Supabase interfaces
+interface Category {
+  id: string;
+  name_am: string;
+  slug: string;
+}
+
+interface Picture {
+  id: string;
+  title: string;
+  image_url: string;
+  categories: Category | null;
+}
 
 const Portfolio: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchParams] = useSearchParams();
+  const categoryFromUrl = searchParams.get('category');
+  const [selectedCategory, setSelectedCategory] = useState(categoryFromUrl || 'all');
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  
+  // Update selectedCategory when URL parameter changes
+  useEffect(() => {
+    const categoryFromUrl = searchParams.get('category');
+    if (categoryFromUrl) {
+      setSelectedCategory(categoryFromUrl);
+    }
+  }, [searchParams]);
+  
+  // Supabase state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [pictures, setPictures] = useState<Picture[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const headerRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -24,147 +56,126 @@ const Portfolio: React.FC = () => {
     image?: string;
   };
 
-  const categories = [
+  // Fetch data from Supabase
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch categories and pictures in parallel
+      const [categoriesResult, picturesResult] = await Promise.all([
+        supabase.from('categories').select('id, name_am, slug'),
+        supabase.from('pictures').select(`
+          id, 
+          title, 
+          image_url, 
+          category_id,
+          categories(id, name_am, slug)
+        `)
+      ]);
+
+      if (categoriesResult.error) {
+        throw new Error(`Failed to fetch categories: ${categoriesResult.error.message}`);
+      }
+
+      if (picturesResult.error) {
+        throw new Error(`Failed to fetch pictures: ${picturesResult.error.message}`);
+      }
+
+      setCategories(categoriesResult.data || []);
+      
+      // Transform pictures data to handle Supabase's relationship structure
+      const transformedPictures = (picturesResult.data || []).map(picture => {
+        let category = null;
+        
+        if (picture.categories) {
+          if (Array.isArray(picture.categories)) {
+            category = picture.categories[0] || null;
+          } else {
+            category = picture.categories;
+          }
+        }
+        
+        return {
+          ...picture,
+          categories: category
+        };
+      });
+      
+      console.log('Raw pictures data:', picturesResult.data);
+      console.log('Transformed pictures:', transformedPictures);
+      setPictures(transformedPictures);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load portfolio data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create dynamic categories from Supabase data (excluding About Me)
+  const dynamicCategories = [
     { id: 'all', label: 'All Work' },
-    { id: 'የመስክ ፎቶዎች', label: 'የመስክ ፎቶዎች' },
-    { id: 'portrait', label: 'Portraits' },
-    { id: 'ክርስትና', label: 'ክርስትና' },
-    { id: 'ሽምግልና', label: 'ሽምግልና' },
-    { id: 'ሰርግ', label: 'ሰርግ' },
-    { id: 'other', label: 'Other' },
-
-
+    ...categories
+      .filter(cat => cat.name_am !== 'About Me') // Exclude About Me category
+      .map(cat => ({
+        id: cat.id,
+        label: cat.name_am
+      }))
   ];
 
-  const meskImages = [
-    '/Image/mesk/Caro_1744920337266_0.webp',
-    '/Image/mesk/Caro_1744920338390_1.webp',
-    '/Image/mesk/Caro_1744920339210_2.webp',
-    '/Image/mesk/Caro_1744920340106_3.webp',
-    '/Image/mesk/Caro_1744920340911_4.webp',
-    '/Image/mesk/Caro_1744920341748_5.webp',
-    '/Image/mesk/Caro_1744920342536_6.webp',
-    '/Image/mesk/Caro_1744920343220_7.webp',
-    '/Image/mesk/Caro_1744920344046_8.webp',
-    '/Image/mesk/Caro_1744920344845_9.webp',
-    '/Image/mesk/Caro_1744921380662_1.webp',
-    '/Image/mesk/Caro_1744921381612_2.webp',
-    '/Image/mesk/Caro_1744921382495_3.webp',
-    '/Image/mesk/Caro_1744921383561_4.webp',
-    '/Image/mesk/Caro_1744921384396_5.webp',
-    '/Image/mesk/Caro_1744921387263_8.webp',
-    '/Image/mesk/Caro_1744921388056_9.webp',
-    '/Image/mesk/Caro_1744921863423_0.webp',
-    '/Image/mesk/Caro_1744921864509_1.webp',
-    '/Image/mesk/Caro_1744921865407_2.webp',
-    '/Image/mesk/Caro_1744921866382_3.webp',
-  ];
+  // Convert Supabase pictures to PortfolioItems
+  const portfolioItems: PortfolioItem[] = pictures
+    .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me') // Exclude About Me category
+    .map((picture, idx) => ({
+      id: idx + 1, // Use simple sequential ID based on index
+      category: picture.categories!.name_am, // Only use pictures with valid categories
+      title: picture.title,
+      description: `${picture.categories!.name_am} ፎቶዎች`,
+      image: picture.image_url
+    }));
 
-  const portraitImages = [
-    '/Image/portrait/IMG_20250209_210543_070.webp',
-    '/Image/portrait/IMG_20250209_212716_397.webp',
-    '/Image/portrait/IMG_20250209_212848_037.webp',
-    '/Image/portrait/Caro_1751278472655_0.webp',
-    '/Image/portrait/Caro_1751278792791_3.webp',
-    '/Image/portrait/Caro_1751368587572_0.webp',
-    '/Image/portrait/Caro_1751374763451_0.webp',
-    '/Image/portrait/Caro_1751374764490_3.webp',
-    '/Image/portrait/Caro_1751374864883_7.webp',
-  ];
+  // Debug logging
+  console.log('Categories:', categories.map(c => c.name_am));
+  console.log('Portfolio items by category:', portfolioItems.reduce((acc, item) => {
+    acc[item.category] = (acc[item.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>));
 
-  const portraitItems: PortfolioItem[] = portraitImages.map((img, idx) => ({
-    id: 200 + idx,
-    category: 'portrait',
-    title: `Portrait ${idx + 1}`,
-    description: 'Portrait photography',
-    image: img
-  }));
-
-  const shimglinaImages = [
-    '/Image/shimglina/Caro_1749502988071_5.webp',
-    '/Image/shimglina/Caro_1749502983577_1.webp',
-    '/Image/shimglina/Caro_1749502985837_3.webp',
-    '/Image/shimglina/Caro_1747084532140_6.webp',
-    '/Image/shimglina/Caro_1747085559964_1.webp',
-    '/Image/shimglina/Caro_1747084527401_2.webp',
-    '/Image/shimglina/Caro_1747084524732_0.webp',
-    //'/shimglina/Caro_1740055145650_3.webp',
-    '/Image/shimglina/Caro_1740113961896_0.webp',
-    '/Image/shimglina/Caro_1740055144495_2.webp',
-    '/Image/shimglina/Caro_1740055143390_1.webp',
-    '/Image/shimglina/Caro_1740055142324_0.webp',
-    '/Image/shimglina/Caro_1749502989407_6.webp',
-    '/Image/shimglina/Caro_1749502986917_4.webp',
-    '/Image/shimglina/Caro_1749502984697_2.webp',
-    '/Image/shimglina/Caro_1749502982509_0.webp',
-    '/Image/shimglina/Caro_1747084526251_1.webp',
-    '/Image/shimglina/Caro_1747084529673_4.webp',
-    '/Image/shimglina/Caro_1747084528554_3.webp',
-  ];
-
-  const shimglinaItems: PortfolioItem[] = shimglinaImages.map((img, idx) => ({
-    id: 300 + idx,
-    category: 'ሽምግልና',
-    title: `Shimglina ${idx + 1}`,
-    description: 'ሽምግልና ፎቶዎች',
-    image: img
-  }));
-
-  const cristinaImages = [
-    '/Image/cristina/Caro_1746461453024_0.webp',
-    '/Image/cristina/Caro_1746461454349_1.webp',
-    '/Image/cristina/Caro_1746461455323_2.webp',
-    '/Image/cristina/Caro_1746478217049_3.webp',
-    '/Image/cristina/Caro_1746650889272_0.webp',
-  ];
-
-  const cristinaItems: PortfolioItem[] = cristinaImages.map((img, idx) => ({
-    id: 400 + idx,
-    category: 'ክርስትና',
-    title: `Cristina ${idx + 1}`,
-    description: 'ክርስትና ፎቶዎች',
-    image: img
-  }));
-
-  const sergImages = [
-    '/Image/serg/Caro_1751540926709_0.webp',
-    '/Image/serg/Caro_1751540927481_2.webp',
-    '/Image/serg/Caro_1751540928963_4.webp',
-    '/Image/serg/Caro_1751540929765_5.webp',
-    '/Image/serg/Caro_1751540930796_6.webp',
-    '/Image/serg/Caro_1751540931627_7.webp',
-    '/Image/serg/Caro_1751540932456_8.webp',
-    '/Image/serg/Caro_1751540933308_9.webp',
-  ];
-
-  const sergItems: PortfolioItem[] = sergImages.map((img, idx) => ({
-    id: 500 + idx,
-    category: 'ሰርግ',
-    title: `Serg ${idx + 1}`,
-    description: 'ሰርግ ፎቶዎች',
-    image: img
-  }));
-
-  const portfolioItems: PortfolioItem[] = [
-    ...meskImages.map((img, idx) => ({
-      id: idx + 1,
-      category: 'የመስክ ፎቶዎች',
-      title: `Field Photo ${idx + 1}`,
-      description: 'የመስክ ፎቶዎች ስእሎች',
-      image: img
-    })),
-    ...portraitItems,
-    ...shimglinaItems,
-    ...cristinaItems,
-    ...sergItems,
-    /*{ id: 101, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461453024_0.png' },*/
-    /*{ id: 104, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461454349_1.png' },*/
-    /*{ id: 107, category: 'ክርስትና', title: ' ', description: ' ', image: '/Image/cristina/Caro_1746461455323_2.png' },*/
-  ];
-
-  const filteredItems = selectedCategory === 'all' 
-    ? portfolioItems 
-    : portfolioItems.filter(item => item.category === selectedCategory);
+  const filteredItems = useMemo(() => {
+    console.log('Filtering with selectedCategory:', selectedCategory);
+    console.log('Available categories:', categories.map(c => ({ id: c.id, name: c.name_am })));
+    console.log('Portfolio items:', portfolioItems.map(p => ({ category: p.category, title: p.title })));
+    
+    if (selectedCategory === 'all') {
+      console.log('Returning all items:', portfolioItems.length);
+      return portfolioItems;
+    }
+    
+    // Try to find category by ID first (for button clicks), then by name (for URL parameters)
+    let category = categories.find(cat => cat.id === selectedCategory);
+    if (!category) {
+      category = categories.find(cat => cat.name_am === selectedCategory);
+    }
+    
+    console.log('Found category:', category);
+    
+    if (!category) {
+      console.log('No category found, returning empty array');
+      return [];
+    }
+    
+    // Filter by category name (since portfolioItems use category names)
+    const filtered = portfolioItems.filter(item => item.category === category.name_am);
+    console.log('Filtered items:', filtered.length, 'for category:', category.name_am);
+    console.log('Filtered items details:', filtered.map(f => ({ title: f.title, category: f.category })));
+    return filtered;
+  }, [selectedCategory, portfolioItems, categories]);
 
   return (
     <div className="min-h-screen pt-20">
@@ -189,13 +200,31 @@ const Portfolio: React.FC = () => {
         className="pb-12"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {loading ? (
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : error ? (
+            <div className="text-center text-red-400">
+              <p>Error loading categories: {error}</p>
+              <button 
+                onClick={fetchData}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
           <div className="flex flex-wrap justify-center gap-4">
-            {categories.map((category, index) => (
+              {dynamicCategories.map((category, index) => (
               <button
                 key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => {
+                  console.log('Button clicked for category:', category.id, category.label);
+                  setSelectedCategory(category.id);
+                }}
                 className={`px-6 py-3 rounded-full font-semibold transition-all duration-300 ${
-                  selectedCategory === category.id
+                    selectedCategory === category.id || selectedCategory === category.label
                     ? 'bg-blue-600 text-white shadow-lg'
                     : 'bg-slate-800 text-gray-300 hover:bg-slate-700 hover:text-white'
                 }`}
@@ -207,6 +236,7 @@ const Portfolio: React.FC = () => {
               </button>
             ))}
           </div>
+          )}
         </div>
       </section>
 
@@ -216,6 +246,42 @@ const Portfolio: React.FC = () => {
         className="pb-20"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-300">Loading portfolio...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <p className="text-red-400 mb-4">Error loading portfolio: {error}</p>
+              <button 
+                onClick={fetchData}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="max-w-md mx-auto">
+                <div className="aspect-square bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+                  <Camera size={64} className="text-gray-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">No Images Yet</h3>
+                <p className="text-gray-300 mb-4">
+                  This category doesn't have any images yet. Check back later or explore other categories.
+                </p>
+                <button 
+                  onClick={() => setSelectedCategory('all')}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  View All Images
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredItems.map((item, index) => (
               <div
@@ -266,6 +332,7 @@ const Portfolio: React.FC = () => {
               </div>
             ))}
           </div>
+          )}
         </div>
       </section>
 

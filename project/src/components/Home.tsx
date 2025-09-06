@@ -1,91 +1,112 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../admin/supabaseClient';
 
 interface HomeProps {
   onPageChange: (page: string) => void;
 }
 
+// Supabase interfaces
+interface Category {
+  id: string;
+  name_am: string;
+  slug: string;
+}
+
+interface Picture {
+  id: string;
+  title: string;
+  image_url: string;
+  categories: Category | null;
+}
+
+interface PortfolioItem {
+  title: string;
+  size: 'large' | 'medium' | 'small';
+  image: string;
+}
+
 const Home: React.FC<HomeProps> = ({ onPageChange }) => {
+  const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState<{ [key: string]: boolean }>({});
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const heroRef = useRef<HTMLDivElement>(null);
   const portfolioRef = useRef<HTMLDivElement>(null);
   const quoteRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
 
-  const portfolioItems = [
-    {
-      title: 'የመስክ ፎቶዎች',
-      //category: 'የመስክ',
-      size: 'large',
-      image: '/Image/mesk/Caro_1744920338390_1.webp'
-    },
-    {
-      title: 'ክርስትና',
-      //category: 'CORPORATE • EVENT',
-      size: 'medium',
-      image: '/Image/cristina/Caro_1746478217049_3.webp'
-    },
-    {
-      title: 'PORTRAITS',
-      //category: 'PORTRAIT',
-      size: 'medium',
-      image: '/Image/portrait/IMG_20250209_212848_037.webp'
-    },
-    {
-      title: 'ሽምግልና',
-      //category: 'ሽምግልና',
-      size: 'medium',
-      image: '/Image/shimglina/Caro_1749502983577_1.webp'
-    },
-    {
-      title: 'ሰርግ',
-      //category: 'serg',
-      size: 'medium',
-      image: '/Image/serg/Caro_1751540927481_2.webp'
-    },
-    /*{
-      title: 'COMMERCIAL',
-      category: 'COMMERCIAL • EDITORIAL',
-      size: 'medium',
-      image: ' '
-    },
-    {
-      title: 'NATURE & TRAVEL',
-      category: 'DOCUMENTARY • TRAVEL',
-      size: 'small',
-      image: ' '
-    },
-    {
-      title: 'EVENTS',
-      category: 'CORPORATE • EVENT',
-      size: 'medium',
-      image: ' '
-    },
-    {
-      title: 'ARTISTIC PORTRAITS',
-      category: 'PORTRAIT • ARTISTIC',
-      size: 'large',
-      image: ' '
-    },
-    {
-      title: 'PRODUCT PHOTOGRAPHY',
-      category: 'FOOD • PRODUCT',
-      size: 'small',
-      image: ' '
-    },
-    {
-      title: 'BRAND CAMPAIGNS',
-      category: 'COMMERCIAL',
-      size: 'medium',
-      image: ' '
-    },
-    {
-      title: 'WILD LIFE',
-      category: 'NATURE • WILDLIFE',
-      size: 'small',
-      image: ' '
-    }*/
-  ];
+  // Handle category click - navigate to portfolio with category filter
+  const handleCategoryClick = (categoryTitle: string) => {
+    console.log('Category clicked:', categoryTitle);
+    const url = `/portfolio?category=${encodeURIComponent(categoryTitle)}`;
+    console.log('Navigating to:', url);
+    navigate(url);
+  };
+
+  // Fetch portfolio data from Supabase
+  const fetchPortfolioData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch pictures with categories
+      const { data: pictures, error } = await supabase
+        .from('pictures')
+        .select(`
+          id, 
+          title, 
+          image_url, 
+          category_id,
+          categories!inner(id, name_am, slug)
+        `);
+
+      if (error) {
+        throw new Error(`Failed to fetch pictures: ${error.message}`);
+      }
+
+      // Transform pictures data to handle Supabase's relationship structure
+      const transformedPictures = (pictures || [])
+        .map(picture => ({
+          ...picture,
+          categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
+        }))
+        .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
+
+      // Group pictures by category and get one representative image per category
+      const categoryMap = new Map<string, Picture>();
+      transformedPictures.forEach(picture => {
+        if (picture.categories && !categoryMap.has(picture.categories.name_am)) {
+          categoryMap.set(picture.categories.name_am, picture);
+        }
+      });
+
+      // Convert to portfolio items with appropriate sizes
+      const items: PortfolioItem[] = Array.from(categoryMap.values()).map((picture) => ({
+        title: picture.categories?.name_am || 'Other',
+        size: 'medium' as 'large' | 'medium' | 'small',
+        image: picture.image_url
+      }));
+
+      // Debug logging
+      console.log('Home - Categories with images:', Array.from(categoryMap.keys()));
+      console.log('Home - Portfolio items count:', items.length);
+
+      setPortfolioItems(items);
+    } catch (err) {
+      console.error('Error fetching portfolio data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load portfolio data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPortfolioData();
+  }, []);
 
   useEffect(() => {
     const observerOptions = {
@@ -191,8 +212,26 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-auto">
-            {portfolioItems.map((item, index) => (
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <p className="text-gray-300">Loading portfolio...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <p className="text-red-400 mb-4">Error loading portfolio: {error}</p>
+              <button 
+                onClick={fetchPortfolioData}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-auto">
+              {portfolioItems.map((item, index) => (
               <div
                 key={index}
                 className={`group cursor-pointer transition-all duration-700 hover:scale-105 ${
@@ -207,7 +246,7 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
                 style={{
                   transitionDelay: `${index * 100}ms`
                 }}
-                onClick={() => onPageChange('portfolio')}
+                onClick={() => handleCategoryClick(item.title)}
               >
                 {/* Image Container */}
                 <div className={`relative overflow-hidden mb-4 ${
@@ -236,7 +275,8 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
 
           {/* View Portfolio Button */}
           <div className={`text-center mt-16 transition-all duration-1000 delay-500 ${

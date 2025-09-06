@@ -1,61 +1,94 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../admin/supabaseClient';
 
 interface ServicesProps {
   onPageChange: (page: string) => void;
 }
 
+// Supabase interfaces
+interface Category {
+  id: string;
+  name_am: string;
+  slug: string;
+}
+
+interface Picture {
+  id: string;
+  title: string;
+  image_url: string;
+  categories: Category | null;
+}
+
+interface ServiceItem {
+  title: string;
+  size: 'large' | 'medium' | 'small';
+  image: string;
+}
+
 const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
-  const services = [
-    {
-      title: 'የመስክ ፎቶዎች',
-      //category: 'የመስክ',
-      size: 'large',
-      image: '/Image/mesk/Caro_1744920338390_1.webp'
-    },
-    {
-      title: 'ክርስትና',
-      //category: 'CORPORATE • EVENT',
-      size: 'medium',
-      image: '/Image/cristina/Caro_1746478217049_3.webp'
-    },
-    {
-      title: 'PORTRAITS',
-      //category: 'PORTRAIT',
-      size: 'medium',
-      image: '/Image/portrait/IMG_20250209_212848_037.webp'
-    },
-    {
-      title: 'ሽምግልና',
-      //category: 'ሽምግልና',
-      size: 'medium',
-      image: '/Image/shimglina/Caro_1749502983577_1.webp'
-    },
-    /*{
-      title: 'Fashion photography',
-      image: ' ',
-      size: 'medium'
-    },
-    {
-      title: 'Commercial photography',
-      image: ' ',
-      size: 'medium'
-    },
-    {
-      title: 'Product photography',
-      image: ' ',
-      size: 'medium'
-    },
-    {
-      title: 'Editorial photography',
-      image: ' ',
-      size: 'large'
-    },
-    {
-      title: 'Travel photography',
-      image: ' ',
-      size: 'medium'
-    }*/
-  ];
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch services data from Supabase
+  const fetchServicesData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Fetch pictures with categories (excluding About Me)
+      const { data: pictures, error } = await supabase
+        .from('pictures')
+        .select(`
+          id, 
+          title, 
+          image_url, 
+          category_id,
+          categories(id, name_am, slug)
+        `);
+
+      if (error) {
+        throw new Error(`Failed to fetch pictures: ${error.message}`);
+      }
+
+      // Transform pictures data to handle Supabase's relationship structure
+      const transformedPictures = (pictures || [])
+        .map(picture => ({
+          ...picture,
+          categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
+        }))
+        .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
+
+      // Group pictures by category and get one representative image per category
+      const categoryMap = new Map<string, Picture>();
+      transformedPictures.forEach(picture => {
+        if (picture.categories && !categoryMap.has(picture.categories.name_am)) {
+          categoryMap.set(picture.categories.name_am, picture);
+        }
+      });
+
+      // Convert to service items with appropriate sizes
+      const serviceItems: ServiceItem[] = Array.from(categoryMap.values()).map((picture, index) => ({
+        title: picture.categories?.name_am || 'Other',
+        size: index === 0 ? 'large' as 'large' | 'medium' | 'small' : 'medium' as 'large' | 'medium' | 'small', // First item is large, others are medium
+        image: picture.image_url
+      }));
+
+      console.log('Services - Categories with images:', Array.from(categoryMap.keys()));
+      console.log('Services - Service items count:', serviceItems.length);
+
+      setServices(serviceItems);
+    } catch (err) {
+      console.error('Error fetching services data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load services data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchServicesData();
+  }, []);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -79,8 +112,26 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
       {/* Services Grid */}
       <section className="pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
-            {services.map((service, index) => (
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                <p className="text-gray-300">Loading services...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-20">
+              <p className="text-red-400 mb-4">Error loading services: {error}</p>
+              <button 
+                onClick={fetchServicesData}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-auto">
+              {services.map((service, index) => (
               <div
                 key={index}
                 className={`group cursor-pointer transition-all duration-500 hover:scale-105 ${
@@ -117,8 +168,9 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
                   </h3>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

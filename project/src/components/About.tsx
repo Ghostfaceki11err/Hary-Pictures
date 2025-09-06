@@ -1,8 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Award, Heart, Users, MapPin, Calendar, Sun, Moon } from 'lucide-react';
+import { supabase } from '../admin/supabaseClient';
 
 const About: React.FC = () => {
   const [darkMode, setDarkMode] = useState(false);
+  const [aboutMeImage, setAboutMeImage] = useState<string | null>(null);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  // Fetch About Me image from Supabase
+  const fetchAboutMeImage = async () => {
+    try {
+      setImageLoading(true);
+      
+      // First, find the About Me category
+      const { data: categoryData, error: categoryError } = await supabase
+        .from('categories')
+        .select('id, name_am, slug')
+        .eq('name_am', 'About Me')
+        .eq('slug', 'about-me')
+        .single();
+
+      if (categoryError && categoryError.code !== 'PGRST116') {
+        console.error('Error fetching about me category:', categoryError);
+        return;
+      }
+
+      if (categoryData) {
+        // Fetch the first image from the About Me category
+        const { data: pictureData, error: pictureError } = await supabase
+          .from('pictures')
+          .select('image_url')
+          .eq('category_id', categoryData.id)
+          .limit(1)
+          .single();
+
+        if (pictureError && pictureError.code !== 'PGRST116') {
+          console.error('Error fetching about me image:', pictureError);
+          return;
+        }
+
+        if (pictureData) {
+          setAboutMeImage(pictureData.image_url);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching about me image:', err);
+    } finally {
+      setImageLoading(false);
+    }
+  };
 
   useEffect(() => {
     const storedTheme = localStorage.getItem('theme');
@@ -13,6 +59,9 @@ const About: React.FC = () => {
       setDarkMode(false);
       document.documentElement.classList.remove('dark');
     }
+    
+    // Fetch About Me image
+    fetchAboutMeImage();
   }, []);
 
   const toggleDarkMode = () => {
@@ -75,11 +124,23 @@ const About: React.FC = () => {
             {/* Profile Image */}
             <div className="relative">
               <div className="aspect-square bg-gradient-to-br from-blue-600 via-purple-600 to-cyan-500 rounded-3xl shadow-2xl flex items-center justify-center overflow-hidden">
-                <img
-                  src="/Image/profile/profile1.webp"
-                  alt="Profile"
-                  className="w-full h-full object-cover rounded-3xl"
-                />
+                {imageLoading ? (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+                  </div>
+                ) : aboutMeImage ? (
+                  <img
+                    src={aboutMeImage}
+                    alt="Profile"
+                    className="w-full h-full object-cover rounded-3xl"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-white">
+                    <Camera size={64} className="mb-4 opacity-60" />
+                    <p className="text-lg font-medium opacity-80">Profile Image</p>
+                    <p className="text-sm opacity-60 mt-1">Coming Soon</p>
+                  </div>
+                )}
               </div>
               <div className="absolute -bottom-6 -right-6 bg-blue-600 text-white p-4 rounded-2xl shadow-lg">
                 <MapPin size={24} />
