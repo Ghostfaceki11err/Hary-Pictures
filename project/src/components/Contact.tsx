@@ -44,8 +44,8 @@ const Contact: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Create FormData for Netlify
-      const formDataToSend = new FormData();
+      // Create properly encoded form data for Netlify
+      const formDataToSend = new URLSearchParams();
       formDataToSend.append('form-name', 'contact');
       formDataToSend.append('name', formData.name);
       formDataToSend.append('email', formData.email);
@@ -54,11 +54,11 @@ const Contact: React.FC = () => {
       formDataToSend.append('date', formData.date);
       formDataToSend.append('message', formData.message);
       
-      // Submit to Netlify
+      // Submit to Netlify with proper encoding
       const response = await fetch('/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(formDataToSend as any).toString()
+        body: formDataToSend.toString()
       });
       
       if (response.ok) {
