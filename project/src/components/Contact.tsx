@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Clock, Send, Instagram, Facebook, Twitter } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, Send, Instagram, Facebook, Twitter, CheckCircle, AlertCircle } from 'lucide-react';
 
 // Custom Telegram SVG component
 const TelegramIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -18,8 +18,20 @@ const TelegramIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+// Form submission status types
+type FormStatus = 'idle' | 'submitting' | 'success' | 'error';
+
+interface FormData {
+  name: string;
+  email: string;
+  phone: string;
+  service: string;
+  date: string;
+  message: string;
+}
+
 const Contact: React.FC = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     email: '',
     phone: '',
@@ -28,7 +40,8 @@ const Contact: React.FC = () => {
     message: ''
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formStatus, setFormStatus] = useState<FormStatus>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -39,9 +52,10 @@ const Contact: React.FC = () => {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setFormStatus('submitting');
+    setErrorMessage('');
     
     try {
       // Create properly encoded form data for Netlify
@@ -62,7 +76,8 @@ const Contact: React.FC = () => {
       });
       
       if (response.ok) {
-        alert('Thank you for your message! I\'ll get back to you within 24 hours.');
+        setFormStatus('success');
+        // Reset form data
         setFormData({
           name: '',
           email: '',
@@ -72,13 +87,16 @@ const Contact: React.FC = () => {
           message: ''
         });
       } else {
-        throw new Error('Form submission failed');
+        throw new Error(`Form submission failed with status: ${response.status}`);
       }
     } catch (error) {
       console.error('Error submitting form:', error);
-      alert('There was an error sending your message. Please try again or contact me directly.');
-    } finally {
-      setIsSubmitting(false);
+      setFormStatus('error');
+      setErrorMessage(
+        error instanceof Error 
+          ? error.message 
+          : 'There was an error sending your message. Please try again or contact me directly.'
+      );
     }
   };
 
@@ -147,12 +165,18 @@ const Contact: React.FC = () => {
                 onSubmit={handleSubmit} 
                 className="space-y-6"
               >
+                {/* Hidden fields required by Netlify */}
                 <input type="hidden" name="form-name" value="contact" />
                 <p className="hidden">
                   <label>
                     Don't fill this out if you're human: <input name="bot-field" />
                   </label>
                 </p>
+                
+                {/* Noscript fallback for Netlify Forms */}
+                <noscript>
+                  <p>This form requires JavaScript to be enabled. Please enable JavaScript in your browser.</p>
+                </noscript>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="name" className="block text-white font-medium mb-2">
@@ -254,12 +278,34 @@ const Contact: React.FC = () => {
                   />
                 </div>
 
+                {/* Success Message */}
+                {formStatus === 'success' && (
+                  <div className="bg-green-600/20 border border-green-500/50 rounded-xl p-4 flex items-center gap-3">
+                    <CheckCircle size={24} className="text-green-400 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-green-400 font-semibold">Message Sent Successfully!</h3>
+                      <p className="text-green-300 text-sm">Thank you for your message. I'll get back to you within 24 hours.</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error Message */}
+                {formStatus === 'error' && (
+                  <div className="bg-red-600/20 border border-red-500/50 rounded-xl p-4 flex items-center gap-3">
+                    <AlertCircle size={24} className="text-red-400 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-red-400 font-semibold">Error Sending Message</h3>
+                      <p className="text-red-300 text-sm">{errorMessage}</p>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={formStatus === 'submitting'}
                   className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white py-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transform hover:-translate-y-1 disabled:transform-none"
                 >
-                  {isSubmitting ? (
+                  {formStatus === 'submitting' ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       Sending...
