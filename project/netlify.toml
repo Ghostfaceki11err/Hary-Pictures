@@ -3,4 +3,9 @@
   publish = "dist"
 
 [secrets.scan]
-  omit_keys = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"]
+  omit_keys = [
+    "VITE_SUPABASE_URL",
+    "VITE_SUPABASE_ANON_KEY",
+    "VITE_TELEGRAM_BOT_TOKEN",
+    "VITE_TELEGRAM_CHAT_IDS"
+  ]
