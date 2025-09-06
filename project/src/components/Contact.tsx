@@ -137,6 +137,52 @@ const Contact: React.FC = () => {
 
   return (
     <div className="min-h-screen pt-20">
+      {/* Hidden static form for Netlify detection at build time */}
+      <form name="contact" data-netlify="true" data-netlify-honeypot="bot-field" style={{ display: 'none' }}>
+        <input type="hidden" name="form-name" value="contact" />
+        <p>
+          <label>
+            Don't fill this out if you're human: <input name="bot-field" />
+          </label>
+        </p>
+        <p>
+          <label>
+            Name: <input type="text" name="name" />
+          </label>
+        </p>
+        <p>
+          <label>
+            Email: <input type="email" name="email" />
+          </label>
+        </p>
+        <p>
+          <label>
+            Phone: <input type="tel" name="phone" />
+          </label>
+        </p>
+        <p>
+          <label>
+            Service: <select name="service">
+              <option value="">Select a service</option>
+              <option value="wedding">Wedding Photography</option>
+              <option value="portrait">Portrait Session</option>
+              <option value="Street photography">Street photography</option>
+              <option value="Real estate photography">Real estate photography</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+        </p>
+        <p>
+          <label>
+            Date: <input type="date" name="date" />
+          </label>
+        </p>
+        <p>
+          <label>
+            Message: <textarea name="message"></textarea>
+          </label>
+        </p>
+      </form>
       {/* Header */}
       <section className="py-20 text-center">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
