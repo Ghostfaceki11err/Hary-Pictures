@@ -1,31 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://harypictures.netlify.app/</loc>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/</loc>
     <lastmod>2025-09-09</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <priority>1</priority>
   </url>
   <url>
-    <loc>https://harypictures.netlify.app/portfolio</loc>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/portfolio</loc>
     <lastmod>2025-09-09</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://harypictures.netlify.app/about</loc>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/about</loc>
     <lastmod>2025-09-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://harypictures.netlify.app/services</loc>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/services</loc>
     <lastmod>2025-09-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://harypictures.netlify.app/contact</loc>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/contact</loc>
+    <lastmod>2025-09-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}*</loc>
+    <lastmod>2025-09-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>${SITEMAP_BASE_URL:-https://harypictures.netlify.app}/google27aa09e668bdc9f3</loc>
     <lastmod>2025-09-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
