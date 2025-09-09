@@ -1154,10 +1154,19 @@ ${sanitizedData.message}
                           setMathChallenge(generateMathChallenge());
                           setUserAnswer('');
                         }}
-                        className="px-3 py-2 text-sm text-gray-400 hover:text-white bg-slate-700/50 hover:bg-slate-600 rounded-lg transition-all duration-300 border border-slate-600 hover:border-slate-500"
                         title="Generate new challenge"
+                        className="group relative inline-flex items-center gap-2 px-4 py-2 rounded-xl overflow-hidden transition-all duration-300 border border-cyan-500/40 text-cyan-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
                       >
-                        🔄
+                        <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-cyan-600/20 via-blue-600/20 to-purple-600/20" />
+                        <span className="absolute -inset-px rounded-xl border border-transparent group-hover:border-cyan-400/40 transition-colors duration-300" />
+                        <svg className="relative w-4 h-4 text-cyan-300 group-hover:text-cyan-200 transition-colors duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                          <path d="M21 3v6h-6" />
+                        </svg>
+                        <span className="relative text-sm font-medium tracking-wide">New Challenge</span>
+                        <span className="relative ml-1 inline-flex">
+                          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
+                        </span>
                       </button>
                     </div>
                   </div>

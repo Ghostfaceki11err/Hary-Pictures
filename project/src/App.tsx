@@ -7,6 +7,7 @@ import About from './components/About';
 import Services from './components/Services';
 import Contact from './components/Contact';
 import { AdminPanel } from './admin';
+import AdminLanding from './admin/landing/AdminLanding';
 import AdminGate from './admin/AdminGate';
 import NotFound from './components/NotFound';
 
@@ -46,6 +47,10 @@ function AppContent() {
           <Route path="/services" element={<Services onPageChange={setCurrentPage} />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/admin" element={<AdminGate />} />
+          <Route path="/admin/categories" element={<AdminPanel initialSection='categories' />} />
+          <Route path="/admin/media" element={<AdminPanel initialSection='media' />} />
+          {/* Removed /admin/overview per design; use /admin/gallery instead */}
+          <Route path="/admin/gallery" element={<AdminPanel initialSection='gallery' />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

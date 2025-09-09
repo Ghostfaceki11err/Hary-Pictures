@@ -59,7 +59,10 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
           ...picture,
           categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
         }))
-        .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
+        .filter(picture => {
+          const name = picture.categories?.name_am;
+          return name && name !== 'About Me' && name !== 'Hero';
+        }); // Exclude About Me and Hero categories
 
       // Group pictures by category and get one random representative image per category
       const categoryMap = new Map<string, Picture[]>();

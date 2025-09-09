@@ -97,8 +97,9 @@ interface Picture {
 
 type ToastType = 'success' | 'error' | 'info';
 interface ToastItem { id: number; type: ToastType; message: string }
+interface AdminPanelProps { initialSection?: 'overview' | 'media' | 'categories' | 'gallery' }
 
-const AdminPanel: React.FC = memo(() => {
+const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview' }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [selectedFilterCategoryId, setSelectedFilterCategoryId] = useState<string>('');
@@ -110,6 +111,7 @@ const AdminPanel: React.FC = memo(() => {
   const [files, setFiles] = useState<File[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [customLightboxSlides, setCustomLightboxSlides] = useState<Array<{ src: string; title?: string; description?: string }> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -164,6 +166,20 @@ const AdminPanel: React.FC = memo(() => {
   const [showProfileUpload, setShowProfileUpload] = useState(false);
   const profileFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Hero State
+  const [heroPictureLoading, setHeroPictureLoading] = useState(false);
+  const [heroCategory, setHeroCategory] = useState<Category | null>(null);
+  const [showCreateHeroCategory, setShowCreateHeroCategory] = useState(false);
+  // no separate modal state for hero delete; we use confirm()
+
+  // Hero Upload State
+  const [heroUploadFiles, setHeroUploadFiles] = useState<File[]>([]);
+  const [heroUploadTitle, setHeroUploadTitle] = useState('');
+  const [isHeroUploading, setIsHeroUploading] = useState(false);
+  // progress UI not shown for hero; keep simple
+  const [showHeroUpload, setShowHeroUpload] = useState(false);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+
   // WebP conversion states
   const [isConverting, setIsConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<{ [key: string]: number }>({});
@@ -175,6 +191,9 @@ const AdminPanel: React.FC = memo(() => {
   const [userEmail, setUserEmail] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  // Admin navigation (sidebar + bottom nav)
+  const [activeSection, setActiveSection] = useState<'overview' | 'media' | 'categories' | 'gallery'>(initialSection);
+
   const showToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setToasts(prev => [...prev, { id, type, message }]);
@@ -185,6 +204,12 @@ const AdminPanel: React.FC = memo(() => {
 
   const handleImageClick = useCallback((index: number) => {
     setLightboxIndex(index);
+    setLightboxOpen(true);
+  }, []);
+
+  const openCustomLightbox = useCallback((images: Array<{ src: string; title?: string; description?: string }>, startIndex: number = 0) => {
+    setCustomLightboxSlides(images);
+    setLightboxIndex(startIndex);
     setLightboxOpen(true);
   }, []);
 
@@ -256,6 +281,7 @@ const AdminPanel: React.FC = memo(() => {
     fetchPictures();
     fetchStorageUsage();
     fetchAboutMeCategory();
+    fetchHeroCategory();
   }, []);
 
   async function fetchCategories() {
@@ -362,6 +388,10 @@ const AdminPanel: React.FC = memo(() => {
   const isAboutMeCategory = (category: Category): boolean => {
     return category.name_am === 'About Me' && category.slug === 'about-me';
   };
+  // Helper function to check if a category is the Hero category
+  const isHeroCategory = (category: Category): boolean => {
+    return category.name_am === 'Hero' && category.slug === 'hero';
+  };
 
   // About Me Image Functions
   const fetchAboutMeCategory = async () => {
@@ -421,6 +451,59 @@ const AdminPanel: React.FC = memo(() => {
       showToast('error', 'Failed to create about me category');
     } finally {
       setProfilePictureLoading(false);
+    }
+  };
+
+  // Hero Image Functions
+  const fetchHeroCategory = async () => {
+    try {
+      setHeroPictureLoading(true);
+      const { data: categoryData, error: categoryError } = await supabase
+        .from('categories')
+        .select('id, name_am, slug')
+        .eq('name_am', 'Hero')
+        .eq('slug', 'hero')
+        .single();
+
+      if (categoryError && categoryError.code !== 'PGRST116') {
+        console.error('Error fetching hero category:', categoryError);
+        return;
+      }
+
+      if (categoryData) {
+        setHeroCategory(categoryData);
+        setShowCreateHeroCategory(false);
+      } else {
+        setHeroCategory(null);
+        setShowCreateHeroCategory(true);
+      }
+    } catch (err) {
+      console.error('Error fetching hero category:', err);
+    } finally {
+      setHeroPictureLoading(false);
+    }
+  };
+
+  const createHeroCategory = async () => {
+    try {
+      setHeroPictureLoading(true);
+      const { data, error } = await supabase
+        .from('categories')
+        .insert({ name_am: 'Hero', slug: 'hero' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setHeroCategory(data);
+      setShowCreateHeroCategory(false);
+      setCategories(prev => [...prev, data]);
+      showToast('success', 'Hero category created successfully!');
+    } catch (err) {
+      console.error('Error creating hero category:', err);
+      showToast('error', 'Failed to create hero category');
+    } finally {
+      setHeroPictureLoading(false);
     }
   };
 
@@ -609,11 +692,146 @@ const AdminPanel: React.FC = memo(() => {
     }
   };
 
+  // Hero Upload Functions
+  const handleHeroFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files);
+      const validFiles: File[] = [];
+      for (const file of selectedFiles) {
+        const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
+                               file.name.toLowerCase().match(/\.(jfif|jpe)$/);
+        if (!isSupportedType) {
+          showToast('error', `File "${file.name}" is not a supported image format. Hero images must be PNG, JPG, JFIF, or WebP format.`);
+          continue;
+        }
+        validFiles.push(file);
+      }
+      if (validFiles.length === 0) {
+        e.target.value = '';
+        return;
+      }
+      setHeroUploadFiles(validFiles);
+    }
+  };
+
+  const handleHeroUpload = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!heroCategory) {
+      showToast('error', 'Hero category not found');
+      return;
+    }
+    if (heroUploadFiles.length === 0) {
+      showToast('error', 'Please select an image');
+      return;
+    }
+    if (heroUploadFiles.length > 1) {
+      showToast('error', 'Only one image is allowed for the Hero section');
+      return;
+    }
+    if (heroPictures.length > 0) {
+      showToast('error', 'Hero section already has an image. Please delete the existing image first.');
+      return;
+    }
+
+    setIsHeroUploading(true);
+    try {
+      const file = heroUploadFiles[0];
+      // Convert to WebP if needed (uses the same utility as main upload)
+      const fileForUpload = await convertToWebP(file, 0.8).catch(() => file);
+      const webpName = file.name.replace(/\.(jpg|jpeg|png|jfif|jpe)$/i, '.webp');
+      const filePath = `${STORAGE_PREFIX}/${heroCategory.slug}/${Date.now()}-${webpName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, fileForUpload, { cacheControl: '3600', upsert: false });
+      if (uploadError) throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase
+        .from('pictures')
+        .insert({
+          title: heroUploadTitle || webpName.replace('.webp', ''),
+          image_url: publicUrl,
+          category_id: heroCategory.id
+        });
+      if (dbError) throw new Error(`Failed to save ${file.name} to database: ${dbError.message}`);
+
+      await fetchPictures();
+      await fetchStorageUsage();
+      setHeroUploadFiles([]);
+      setHeroUploadTitle('');
+      setShowHeroUpload(false);
+      if (heroFileInputRef.current) heroFileInputRef.current.value = '';
+      showToast('success', 'Hero image updated successfully!');
+    } catch (err) {
+      console.error('Hero upload error:', err);
+      showToast('error', err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIsHeroUploading(false);
+    }
+  };
+
+  const handleHeroDeleteClick = (pictureId: string) => {
+    // Simple confirm for now
+    if (window.confirm('Delete this Hero image?')) {
+      deleteSpecificHeroImage(pictureId);
+    }
+  };
+
+  const deleteSpecificHeroImage = async (pictureId: string) => {
+    try {
+      setHeroPictureLoading(true);
+      const { data: pictureData, error: fetchError } = await supabase
+        .from('pictures')
+        .select('image_url')
+        .eq('id', pictureId)
+        .single();
+      if (fetchError) throw new Error(`Failed to fetch image data: ${fetchError.message}`);
+
+      const imageUrl = pictureData.image_url;
+      const urlParts = imageUrl.split('/');
+      const fileName = urlParts[urlParts.length - 1];
+      const folderPath = urlParts[urlParts.length - 2];
+      const filePath = `${STORAGE_PREFIX}/${folderPath}/${fileName}`;
+
+      const { error: storageError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .remove([filePath]);
+      if (storageError) {
+        console.error('Error deleting from storage:', storageError);
+      }
+
+      const { error: deleteError } = await supabase
+        .from('pictures')
+        .delete()
+        .eq('id', pictureId);
+      if (deleteError) throw new Error(`Failed to delete from database: ${deleteError.message}`);
+
+      await fetchPictures();
+      await fetchStorageUsage();
+      showToast('success', 'Hero image deleted successfully!');
+    } catch (err) {
+      console.error('Error deleting hero image:', err);
+      showToast('error', 'Failed to delete hero image');
+    } finally {
+      setHeroPictureLoading(false);
+    }
+  };
+
   // Get pictures from About Me category only
   const aboutMePictures = useMemo(() => {
     if (!profilePictureCategory) return [];
     return pictures.filter(pic => pic.categories?.id === profilePictureCategory.id);
   }, [pictures, profilePictureCategory]);
+
+  // Get pictures from Hero category only
+  const heroPictures = useMemo(() => {
+    if (!heroCategory) return [];
+    return pictures.filter(pic => pic.categories?.id === heroCategory.id);
+  }, [pictures, heroCategory]);
 
   // Derived maps for counts and previews (excluding About Me category)
   const categoryIdToCount = useMemo(() => {
@@ -641,7 +859,7 @@ const AdminPanel: React.FC = memo(() => {
     return pictures
       .filter(pic => {
         // Filter out pictures from About Me category
-        if (pic.categories && isAboutMeCategory(pic.categories)) {
+        if (pic.categories && (isAboutMeCategory(pic.categories) || isHeroCategory(pic.categories))) {
           return false;
         }
         // Apply category filter
@@ -1200,7 +1418,8 @@ const AdminPanel: React.FC = memo(() => {
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 sm:w-64 sm:h-64 bg-pink-500/5 rounded-full blur-2xl animate-pulse delay-500"></div>
       </div>
 
-      {/* Header */}
+      {/* Header - show only on overview */}
+      {activeSection === 'overview' && (
       <section 
         ref={headerRef}
         className="relative py-20 text-center"
@@ -1272,6 +1491,8 @@ const AdminPanel: React.FC = memo(() => {
           <p className="text-xl sm:text-2xl text-gray-300 leading-relaxed max-w-3xl mx-auto mb-8">
             Manage your visual content with style and precision
           </p>
+
+          {/* Sidebar replaces tabs (mobile bottom nav added below) */}
           
           {/* Quick Stats */}
           <div className="flex flex-wrap justify-center gap-6 mt-12">
@@ -1290,16 +1511,58 @@ const AdminPanel: React.FC = memo(() => {
           </div>
         </div>
       </section>
+      )}
 
       
 
       {/* Layout */}
       <section ref={uploadRef} className="pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[260px,1fr] gap-4 lg:gap-6">
             {/* Sidebar */}
-            <aside className="space-y-6">
-              {/* Quick Actions */}
+            <aside className="space-y-6 sticky top-24 self-start">
+              {/* Nav */}
+              <nav className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
+                <div className="relative grid gap-2">
+                  {[
+                    { id: 'overview', label: 'Overview', icon: (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 13h8V3H3v10zM13 21h8v-6h-8v6zM13 3v8h8V3h-8zM3 21h8v-6H3v6z" /></svg>
+                    ) },
+                    { id: 'media', label: 'Media', icon: (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16v12H4z" /><path d="M2 20h20" /><path d="M8 10l2.5 3 3.5-5 4 6" /></svg>
+                    ) },
+                    { id: 'categories', label: 'Categories', icon: (
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+                    ) },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveSection(item.id as any)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
+                        activeSection === item.id
+                          ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow'
+                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span className="opacity-90">{item.icon}</span>
+                      <span className="font-medium">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {activeSection !== 'overview' && (
+                  <div className="relative mt-3 pt-3 border-t border-white/10">
+                    <button
+                      onClick={() => { window.location.href = '/admin'; }}
+                      className="w-full px-3 py-2 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-colors"
+                    >
+                      ← Admin Home
+                    </button>
+                  </div>
+                )}
+              </nav>
+              {/* Quick Actions - only on overview */}
+              {activeSection === 'overview' && (
               <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
                 <div className="relative">
@@ -1325,8 +1588,10 @@ const AdminPanel: React.FC = memo(() => {
                 </div>
               </div>
                 </div>
+              )}
 
-              {/* Enhanced Stats */}
+              {/* Enhanced Stats - Overview */}
+              {activeSection === 'overview' && (
               <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
                 <div className="relative">
@@ -1350,8 +1615,10 @@ const AdminPanel: React.FC = memo(() => {
                   </div>
                 </div>
               </div>
+              )}
               
-              {/* Tips */}
+              {/* Tips - Overview */}
+              {activeSection === 'overview' && (
               <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5"></div>
                 <div className="relative">
@@ -1371,8 +1638,10 @@ const AdminPanel: React.FC = memo(() => {
                   </div>
                 </div>
               </div>
+              )}
               
-              {/* Enhanced Storage Usage Indicator */}
+              {/* Enhanced Storage Usage Indicator - Overview */}
+              {activeSection === 'overview' && (
               <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
                 <div className="relative">
@@ -1486,8 +1755,10 @@ const AdminPanel: React.FC = memo(() => {
                 )}
                 </div>
               </div>
+              )}
 
-              {/* Enhanced About Me Image Section */}
+              {/* Profile section - Media */}
+              {activeSection === 'media' && (
               <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
                 <div className="relative">
@@ -1570,7 +1841,13 @@ const AdminPanel: React.FC = memo(() => {
                     <div className="grid grid-cols-1 gap-3">
                       {aboutMePictures.map((picture) => (
                         <div key={picture.id} className="relative group">
-                          <div className="w-48 h-48 mx-auto rounded-lg overflow-hidden border-2 border-white/20 bg-slate-800">
+                          <div
+                            className="w-48 h-48 mx-auto rounded-lg overflow-hidden border-2 border-white/20 bg-slate-800 cursor-pointer"
+                            onClick={() => openCustomLightbox(
+                              aboutMePictures.map(p => ({ src: p.image_url, title: p.title })),
+                              aboutMePictures.findIndex(p => p.id === picture.id)
+                            )}
+                          >
                             <img 
                               src={picture.image_url} 
                               alt={picture.title} 
@@ -1620,11 +1897,177 @@ const AdminPanel: React.FC = memo(() => {
                 )}
                 </div>
               </div>
+              )}
+
+              {/* Hero section - Media */}
+              {activeSection === 'media' && (
+              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-teal-500/5"></div>
+                <div className="relative">
+                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                    Hero Management
+                  </h3>
+
+                  {heroPictureLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
+                      <span className="ml-2 text-sm text-gray-300">Loading...</span>
+                    </div>
+                  ) : showCreateHeroCategory ? (
+                    <div className="space-y-4">
+                      <div className="text-center py-4">
+                        <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-300 mb-4">
+                          No "Hero" category found. Create one to manage the hero image.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm text-gray-300 mb-1">Category Name:</label>
+                          <div className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm flex items-center justify-between">
+                            <span className="text-white">Hero</span>
+                            <span className="text-xs text-gray-400 bg-slate-700 px-2 py-1 rounded">Fixed</span>
+                          </div>
+                        </div>
+                        <div className="bg-slate-800/50 p-3 rounded-lg">
+                          <p className="text-xs text-gray-400 mb-1">Slug (file name):</p>
+                          <p className="text-sm text-emerald-400 font-mono">hero</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={createHeroCategory}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                          >
+                            Create Category
+                          </button>
+                          <button
+                            onClick={() => setShowCreateHeroCategory(false)}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : heroCategory && heroPictures.length === 0 ? (
+                    <div className="space-y-4">
+                      <div className="text-center py-4">
+                        <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-sm text-gray-300 mb-2">
+                          "Hero" category exists but has no images.
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Upload a WebP image to this category to use as the Hero image.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowHeroUpload(true)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upload Hero Image
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-3">
+                        {heroPictures.map((picture) => (
+                          <div key={picture.id} className="relative group">
+                            <div
+                              className="w-48 h-48 mx-auto rounded-lg overflow-hidden border-2 border-white/20 bg-slate-800 cursor-pointer"
+                              onClick={() => openCustomLightbox(
+                                heroPictures.map(p => ({ src: p.image_url, title: p.title })),
+                                heroPictures.findIndex(p => p.id === picture.id)
+                              )}
+                            >
+                              <img src={picture.image_url} alt={picture.title} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleHeroDeleteClick(picture.id)}
+                                className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
+                                title="Delete this image"
+                              >
+                                <X className="w-3 h-3 text-white" />
+                              </button>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1 text-center">{picture.title}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (heroPictures.length > 0) {
+                            showToast('info', 'Please delete the existing Hero image before uploading a new one. Only one image is allowed in the Hero section.');
+                          } else {
+                            setShowHeroUpload(true);
+                          }
+                        }}
+                        disabled={heroPictures.length > 0}
+                        className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                          heroPictures.length > 0 
+                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        }`}
+                      >
+                        <Upload className="w-4 h-4" />
+                        {heroPictures.length > 0 ? 'Delete Existing Image First' : 'Upload Image'}
+                      </button>
+                      {heroPictures.length > 0 && (
+                        <p className="text-xs text-gray-400 text-center mt-2">
+                          Only one image is allowed in the Hero section. Delete the current image to upload a new one.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Upload Drawer */}
+                  {showHeroUpload && heroCategory && (
+                    <div className="mt-4 p-4 bg-slate-800/50 rounded-xl border border-white/10">
+                      <form onSubmit={handleHeroUpload} className="space-y-3">
+                        <input
+                          ref={heroFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleHeroFileChange}
+                          className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700"
+                        />
+                        <input
+                          type="text"
+                          value={heroUploadTitle}
+                          onChange={(e) => setHeroUploadTitle(e.target.value)}
+                          placeholder="Optional title"
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={isHeroUploading}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                          >
+                            {isHeroUploading ? 'Uploading...' : 'Upload'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowHeroUpload(false)}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              </div>
+              )}
             </aside>
 
             {/* Main content */}
             <div className="space-y-8">
-              {/* Enhanced Category Management */}
+              {/* Enhanced Category Management - Categories */}
+              {activeSection === 'categories' && (
               <div className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-3xl blur opacity-20" />
                 <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
@@ -1729,6 +2172,11 @@ const AdminPanel: React.FC = memo(() => {
                                       Profile
                                     </span>
                                   )}
+                                  {isHeroCategory(cat) && (
+                                    <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+                                      Hero
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-4 text-sm text-gray-400">
                                   <span>{categoryIdToCount[cat.id] || 0} pictures</span>
@@ -1738,7 +2186,7 @@ const AdminPanel: React.FC = memo(() => {
                               </div>
                               
                               <div className="flex items-center gap-2">
-                          {isAboutMeCategory(cat) ? (
+                          {isAboutMeCategory(cat) || isHeroCategory(cat) ? (
                             <button 
                               disabled 
                                     className="px-4 py-2 rounded-xl bg-gray-600/50 cursor-not-allowed text-gray-400 flex items-center gap-2 text-sm border border-gray-600/50"
@@ -1801,8 +2249,31 @@ const AdminPanel: React.FC = memo(() => {
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Enhanced Upload Section */}
+              {/* Mobile bottom nav */}
+              <div className="lg:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[95%]">
+                <div className="flex items-center justify-around bg-white/10 backdrop-blur-xl border border-white/15 rounded-2xl p-2">
+                  {[
+                    { id: 'overview', label: 'Overview' },
+                    { id: 'media', label: 'Media' },
+                    { id: 'categories', label: 'Categories' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveSection(item.id as any)}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium ${
+                        activeSection === item.id ? 'bg-white/20 text-white' : 'text-gray-300'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Enhanced Upload Section - Media only */}
+              {activeSection === 'media' && (
               <div className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-3xl blur opacity-20" />
                 <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
@@ -1836,7 +2307,7 @@ const AdminPanel: React.FC = memo(() => {
                         required
                       >
                         <option value="" className="bg-slate-800 text-white">Choose a category for your pictures</option>
-                        {categories.filter(cat => !isAboutMeCategory(cat)).map(cat => (
+                        {categories.filter(cat => !isAboutMeCategory(cat) && !isHeroCategory(cat)).map(cat => (
                           <option key={cat.id} value={cat.id} className="bg-slate-800 text-white">
                             {cat.name_am} ({cat.slug})
                           </option>
@@ -1989,8 +2460,10 @@ const AdminPanel: React.FC = memo(() => {
                   </form>
                 </div>
               </div>
+              )}
 
-              {/* Enhanced Gallery */}
+              {/* Enhanced Gallery - Gallery only */}
+              {activeSection === 'gallery' && (
               <div ref={gridRef} className="relative overflow-hidden rounded-3xl">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 rounded-3xl blur opacity-10" />
                 <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
@@ -2152,6 +2625,7 @@ const AdminPanel: React.FC = memo(() => {
                   )}
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -2161,9 +2635,9 @@ const AdminPanel: React.FC = memo(() => {
       {lightboxOpen && (
         <Lightbox
           open={lightboxOpen}
-          close={() => setLightboxOpen(false)}
+          close={() => { setLightboxOpen(false); setCustomLightboxSlides(null); }}
           index={lightboxIndex}
-          slides={lightboxSlides}
+          slides={customLightboxSlides || lightboxSlides}
           on={{ view: ({ index }) => setLightboxIndex(index) }}
           plugins={[Fullscreen, Zoom, Slideshow]}
           slideshow={{ delay: 8000 }}

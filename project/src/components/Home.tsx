@@ -33,6 +33,8 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  // const [heroLoading, setHeroLoading] = useState<boolean>(false);
   
   const heroRef = useRef<HTMLDivElement>(null);
   const portfolioRef = useRef<HTMLDivElement>(null);
@@ -74,7 +76,10 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
           ...picture,
           categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
         }))
-        .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me'); // Exclude About Me category
+        .filter(picture => {
+          const name = picture.categories?.name_am;
+          return name && name !== 'About Me' && name !== 'Hero';
+        }); // Exclude About Me and Hero categories
 
       // Group pictures by category and get one random representative image per category
       const categoryMap = new Map<string, Picture[]>();
@@ -90,7 +95,7 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
 
       // Select one random image from each category
       const selectedPictures: Picture[] = [];
-      categoryMap.forEach((pictures, categoryName) => {
+      categoryMap.forEach((pictures) => {
         if (pictures.length > 0) {
           const randomIndex = Math.floor(Math.random() * pictures.length);
           selectedPictures.push(pictures[randomIndex]);
@@ -120,6 +125,45 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
 
   useEffect(() => {
     fetchPortfolioData();
+  }, []);
+
+  // Fetch Hero image from Supabase (category: Hero / slug: hero)
+  useEffect(() => {
+    const fetchHeroImage = async () => {
+      try {
+        // setHeroLoading(true);
+        // Find Hero category
+        const { data: cat, error: catErr } = await supabase
+          .from('categories')
+          .select('id, name_am, slug')
+          .eq('name_am', 'Hero')
+          .eq('slug', 'hero')
+          .single();
+
+        if (catErr || !cat) {
+          setHeroImageUrl(null);
+          return;
+        }
+
+        // Get one image from Hero category
+        const { data: pics, error: picsErr } = await supabase
+          .from('pictures')
+          .select('id, image_url')
+          .eq('category_id', cat.id)
+          .limit(1);
+
+        if (picsErr || !pics || pics.length === 0) {
+          setHeroImageUrl(null);
+          return;
+        }
+        setHeroImageUrl(pics[0].image_url);
+      } catch (e) {
+        setHeroImageUrl(null);
+      } finally {
+        // setHeroLoading(false);
+      }
+    };
+    fetchHeroImage();
   }, []);
 
   useEffect(() => {
@@ -253,12 +297,21 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
               : 'opacity-0 scale-95'
           }`}>
             <div className="relative group">
-              <img 
-                src="/Image/wide/wide1.jpg"
-                alt="Featured Photography Work"
-                className="block transition-all duration-700 group-hover:scale-105 group-hover:brightness-110"
-                loading="lazy"
-              />
+              {heroImageUrl ? (
+                <img 
+                  src={heroImageUrl}
+                  alt="Featured Hero"
+                  className="block transition-all duration-700 group-hover:scale-105 group-hover:brightness-110"
+                  loading="eager"
+                />
+              ) : (
+                <img 
+                  src="/Image/wide/wide1.jpg"
+                  alt="Featured Photography Work"
+                  className="block transition-all duration-700 group-hover:scale-105 group-hover:brightness-110"
+                  loading="lazy"
+                />
+              )}
               {/* Creative overlay with gradient */}
               <div className="absolute inset-0 bg-gradient-to-br from-black/20 via-transparent to-black/40 pointer-events-none transition-all duration-700 group-hover:from-black/10 group-hover:to-black/30"></div>
               

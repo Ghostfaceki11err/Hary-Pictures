@@ -50,6 +50,11 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onPageChange }) => {
   }, []);
 
   const isAdminRoute = location.pathname === '/admin';
+  const hideMainNavOnAdmin = (
+    location.pathname === '/admin/categories' ||
+    location.pathname === '/admin/media' ||
+    location.pathname === '/admin/gallery'
+  );
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -90,8 +95,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onPageChange }) => {
             <span className="text-white font-bold text-xl tracking-wide">Hary Pictures</span>
           </Link>
 
-          {/* Desktop Navigation (hidden on /admin) */}
-          {!isAdminRoute && (
+          {/* Desktop Navigation (hidden on /admin and admin subroutes) */}
+          {!(isAdminRoute || hideMainNavOnAdmin) && (
             <nav className="hidden md:flex space-x-8">
               {navItems.map((item) => (
                 <Link
@@ -110,8 +115,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onPageChange }) => {
             </nav>
           )}
 
-          {/* Mobile Menu Button (hidden on /admin) */}
-          {!isAdminRoute && (
+          {/* Mobile Menu Button (hidden on /admin and admin subroutes) */}
+          {!(isAdminRoute || hideMainNavOnAdmin) && (
             <button
               className="md:hidden text-white p-2 hover:bg-white/10 rounded-lg transition-colors duration-300"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -121,8 +126,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onPageChange }) => {
           )}
         </div>
 
-        {/* Mobile Navigation (hidden on /admin) */}
-        {!isAdminRoute && isMenuOpen && (
+        {/* Mobile Navigation (hidden on /admin and admin subroutes) */}
+        {!(isAdminRoute || hideMainNavOnAdmin) && isMenuOpen && (
           <div className="md:hidden bg-slate-900/95 backdrop-blur-md rounded-lg mt-2 mb-4 overflow-hidden">
             {navItems.map((item) => (
               <Link
