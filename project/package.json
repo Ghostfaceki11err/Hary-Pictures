@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "prebuild": "node scripts/generate-sitemap.mjs --base=${SITEMAP_BASE_URL:-https://harypictures.netlify.app}",
+    "build": "vite build && node -e \"const fs=require('fs'),path=require('path');const files=['robots.txt','sitemap.xml','_headers','_redirects'];const src='public',dst='dist';fs.mkdirSync(dst,{recursive:true});for(const f of files){const s=path.join(src,f),d=path.join(dst,f);if(fs.existsSync(s)){fs.copyFileSync(s,d);}}\"",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sitemap": "node scripts/generate-sitemap.mjs --base=${SITEMAP_BASE_URL:-https://harypictures.netlify.app}"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
