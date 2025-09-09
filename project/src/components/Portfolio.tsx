@@ -122,7 +122,11 @@ const Portfolio: React.FC = () => {
   const dynamicCategories = [
     { id: 'all', label: 'All Work' },
     ...categories
-      .filter(cat => cat.name_am !== 'About Me' && cat.name_am !== 'Hero') // Exclude About Me and Hero categories
+      .filter(cat => {
+        const name = cat.name_am?.toLowerCase().trim();
+        const slug = cat.slug?.toLowerCase().trim();
+        return name !== 'about me' && name !== 'hero' && slug !== 'hero';
+      }) // Exclude About Me and Hero categories (normalized)
       .map(cat => ({
         id: cat.id,
         label: cat.name_am
@@ -131,7 +135,12 @@ const Portfolio: React.FC = () => {
 
   // Convert Supabase pictures to PortfolioItems
   const portfolioItems: PortfolioItem[] = pictures
-    .filter(picture => picture.categories?.name_am && picture.categories.name_am !== 'About Me' && picture.categories.name_am !== 'Hero') // Exclude About Me and Hero
+    .filter(picture => {
+      const cat = picture.categories;
+      const name = cat?.name_am?.toLowerCase().trim();
+      const slug = cat?.slug?.toLowerCase().trim();
+      return !!name && name !== 'about me' && name !== 'hero' && slug !== 'hero';
+    }) // Exclude About Me and Hero (normalized)
     .map((picture, idx) => ({
       id: idx + 1, // Use simple sequential ID based on index
       category: picture.categories!.name_am, // Only use pictures with valid categories

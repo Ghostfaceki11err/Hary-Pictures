@@ -77,9 +77,12 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
           categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
         }))
         .filter(picture => {
-          const name = picture.categories?.name_am;
-          return name && name !== 'About Me' && name !== 'Hero';
-        }); // Exclude About Me and Hero categories
+          const cat = picture.categories;
+          const name = cat?.name_am?.toLowerCase().trim();
+          const slug = cat?.slug?.toLowerCase().trim();
+          // Exclude About Me and Hero (by name or slug, normalized)
+          return !!name && name !== 'about me' && name !== 'hero' && slug !== 'hero';
+        });
 
       // Group pictures by category and get one random representative image per category
       const categoryMap = new Map<string, Picture[]>();
