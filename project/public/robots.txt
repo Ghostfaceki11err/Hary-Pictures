@@ -9,5 +9,3 @@ Allow: /
 # Sitemap location
 Sitemap: https://harypictures.netlify.app/sitemap.xml
 
-# Crawl delay (optional - be respectful to server resources)
-Crawl-delay: 1
