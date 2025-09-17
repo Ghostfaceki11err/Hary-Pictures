@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "npx puppeteer browsers install chrome && npm run build"
   publish = "dist"
 
 # Disable Netlify's built-in prerendering to avoid 502 errors
