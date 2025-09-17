@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-sitemap.mjs --base=${SITEMAP_BASE_URL:-https://harypictures.netlify.app}",
+    "prebuild": "echo 'Skipping sitemap generation - using manual sitemap.xml'",
     "build": "vite build && node -e \"const fs=require('fs'),path=require('path');const files=['robots.txt','sitemap.xml','_headers','_redirects'];const src='public',dst='dist';fs.mkdirSync(dst,{recursive:true});for(const f of files){const s=path.join(src,f),d=path.join(dst,f);if(fs.existsSync(s)){fs.copyFileSync(s,d);}}\"",
     "postbuild": "node scripts/prerender.mjs",
     "lint": "eslint .",
