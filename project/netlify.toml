@@ -17,7 +17,28 @@
 [functions]
   directory = "netlify/functions"
 
-# Redirect rules for SPA
+# Redirect rules for SPA - serve prerendered files when they exist
+[[redirects]]
+  from = "/portfolio"
+  to = "/portfolio/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/about"
+  to = "/about/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/services"
+  to = "/services/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/contact"
+  to = "/contact/index.html"
+  status = 200
+
+# Fallback for all other routes
 [[redirects]]
   from = "/*"
   to = "/index.html"
