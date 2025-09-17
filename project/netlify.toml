@@ -2,6 +2,18 @@
   command = "npm run build"
   publish = "dist"
 
+# Disable Netlify's built-in prerendering to avoid 502 errors
+[build.processing]
+  skip_processing = false
+[build.processing.css]
+  bundle = true
+  minify = true
+[build.processing.js]
+  bundle = true
+  minify = true
+[build.processing.html]
+  pretty_urls = true
+
 [functions]
   directory = "netlify/functions"
 
