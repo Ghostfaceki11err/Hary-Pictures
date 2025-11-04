@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../admin/supabaseClient';
+// JWT error handling is now built into the fetch function
 
 interface HomeProps {
   onPageChange: (page: string) => void;
@@ -55,6 +56,15 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
       setLoading(true);
       setError(null);
       
+      // Check if we have a valid session, if not, sign out and retry
+      const { error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.warn('Session check failed:', sessionError);
+        // Clear any invalid session
+        await supabase.auth.signOut();
+      }
+      
       // Fetch pictures with categories
       const { data: pictures, error } = await supabase
         .from('pictures')
@@ -67,7 +77,74 @@ const Home: React.FC<HomeProps> = ({ onPageChange }) => {
         `);
 
       if (error) {
-        throw new Error(`Failed to fetch pictures: ${error.message}`);
+        // If it's a JWT error, try to refresh the session
+        if (error.message.includes('JWT') || error.message.includes('expired')) {
+          console.warn('JWT expired, attempting to refresh session...');
+          await supabase.auth.signOut();
+          // Retry the request after clearing the session
+          const retryResult = await supabase
+            .from('pictures')
+            .select(`
+              id, 
+              title, 
+              image_url, 
+              category_id,
+              categories!inner(id, name_am, slug)
+            `);
+          if (retryResult.error) {
+            throw new Error(`Failed to fetch pictures: ${retryResult.error.message}`);
+          }
+          // Use the retry result data
+          const transformedPictures = (retryResult.data || [])
+            .map(picture => ({
+              ...picture,
+              categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
+            }))
+            .filter(picture => {
+              const cat = picture.categories;
+              const name = cat?.name_am?.toLowerCase().trim();
+              const slug = cat?.slug?.toLowerCase().trim();
+              // Exclude About Me and Hero (by name or slug, normalized)
+              return !!name && name !== 'about me' && name !== 'hero' && slug !== 'hero';
+            });
+
+          // Group pictures by category and get one random representative image per category
+          const categoryMap = new Map<string, Picture[]>();
+          transformedPictures.forEach(picture => {
+            if (picture.categories) {
+              const categoryName = picture.categories.name_am;
+              if (!categoryMap.has(categoryName)) {
+                categoryMap.set(categoryName, []);
+              }
+              categoryMap.get(categoryName)!.push(picture);
+            }
+          });
+
+          // Select one random image from each category
+          const selectedPictures: Picture[] = [];
+          categoryMap.forEach((pictures) => {
+            if (pictures.length > 0) {
+              const randomIndex = Math.floor(Math.random() * pictures.length);
+              selectedPictures.push(pictures[randomIndex]);
+            }
+          });
+
+          // Convert to portfolio items with appropriate sizes
+          const portfolioItems: PortfolioItem[] = selectedPictures.map((picture, index) => ({
+            id: picture.id,
+            title: picture.title || '',
+            category: picture.categories?.name_am || 'Uncategorized',
+            description: picture.title || '',
+            image: picture.image_url || '',
+            // Alternate between different sizes for visual variety
+            size: index % 3 === 0 ? 'large' : index % 3 === 1 ? 'medium' : 'small'
+          }));
+
+          setPortfolioItems(portfolioItems);
+          return;
+        } else {
+          throw new Error(`Failed to fetch pictures: ${error.message}`);
+        }
       }
 
       // Transform pictures data to handle Supabase's relationship structure

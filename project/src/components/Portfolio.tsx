@@ -7,6 +7,8 @@ import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import Slideshow from 'yet-another-react-lightbox/plugins/slideshow';
 import { supabase } from '../admin/supabaseClient';
+import { checkEnvironment } from '../utils/envCheck';
+// JWT error handling is now built into the fetch function
 
 // Supabase interfaces
 interface Category {
@@ -58,6 +60,10 @@ const Portfolio: React.FC = () => {
 
   // Fetch data from Supabase
   useEffect(() => {
+    // Check environment in production for debugging
+    if (import.meta.env.PROD) {
+      checkEnvironment();
+    }
     fetchData();
   }, []);
 
@@ -66,6 +72,15 @@ const Portfolio: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      // Check if we have a valid session, if not, sign out and retry
+      const { error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.warn('Session check failed:', sessionError);
+        // Clear any invalid session
+        await supabase.auth.signOut();
+      }
       
       // Fetch categories and pictures in parallel
       const [categoriesResult, picturesResult] = await Promise.all([
@@ -80,11 +95,41 @@ const Portfolio: React.FC = () => {
       ]);
 
       if (categoriesResult.error) {
-        throw new Error(`Failed to fetch categories: ${categoriesResult.error.message}`);
+        // If it's a JWT error, try to refresh the session
+        if (categoriesResult.error.message.includes('JWT') || categoriesResult.error.message.includes('expired')) {
+          console.warn('JWT expired, attempting to refresh session...');
+          await supabase.auth.signOut();
+          // Retry the request after clearing the session
+          const retryResult = await supabase.from('categories').select('id, name_am, slug');
+          if (retryResult.error) {
+            throw new Error(`Failed to fetch categories: ${retryResult.error.message}`);
+          }
+          (categoriesResult as any).data = retryResult.data;
+        } else {
+          throw new Error(`Failed to fetch categories: ${categoriesResult.error.message}`);
+        }
       }
 
       if (picturesResult.error) {
-        throw new Error(`Failed to fetch pictures: ${picturesResult.error.message}`);
+        // If it's a JWT error, try to refresh the session
+        if (picturesResult.error.message.includes('JWT') || picturesResult.error.message.includes('expired')) {
+          console.warn('JWT expired, attempting to refresh session...');
+          await supabase.auth.signOut();
+          // Retry the request after clearing the session
+          const retryResult = await supabase.from('pictures').select(`
+            id, 
+            title, 
+            image_url, 
+            category_id,
+            categories(id, name_am, slug)
+          `);
+          if (retryResult.error) {
+            throw new Error(`Failed to fetch pictures: ${retryResult.error.message}`);
+          }
+          (picturesResult as any).data = retryResult.data;
+        } else {
+          throw new Error(`Failed to fetch pictures: ${picturesResult.error.message}`);
+        }
       }
 
       setCategories(categoriesResult.data || []);
@@ -112,7 +157,27 @@ const Portfolio: React.FC = () => {
       setPictures(transformedPictures);
     } catch (err) {
       console.error('Error fetching data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load portfolio data');
+      
+      // Enhanced error logging for production debugging
+      if (import.meta.env.PROD) {
+        console.error('Production error details:', {
+          error: err,
+          message: err instanceof Error ? err.message : 'Unknown error',
+          stack: err instanceof Error ? err.stack : undefined,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent,
+          url: window.location.href
+        });
+      }
+      
+      // Set user-friendly error message
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load portfolio data';
+      setError(errorMessage);
+      
+      // In production, if it's a network or Supabase error, show a more helpful message
+      if (import.meta.env.PROD && (errorMessage.includes('fetch') || errorMessage.includes('network') || errorMessage.includes('Supabase'))) {
+        setError('Unable to load portfolio at the moment. Please check your internet connection and try again.');
+      }
     } finally {
       setLoading(false);
     }

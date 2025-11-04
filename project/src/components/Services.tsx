@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../admin/supabaseClient';
+// JWT error handling is now built into the fetch function
 
 interface ServicesProps {
   onPageChange: (page: string) => void;
@@ -38,6 +39,15 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
       setLoading(true);
       setError(null);
       
+      // Check if we have a valid session, if not, sign out and retry
+      const { error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.warn('Session check failed:', sessionError);
+        // Clear any invalid session
+        await supabase.auth.signOut();
+      }
+      
       // Fetch pictures with categories (excluding About Me)
       const { data: pictures, error } = await supabase
         .from('pictures')
@@ -50,7 +60,70 @@ const Services: React.FC<ServicesProps> = ({ onPageChange }) => {
         `);
 
       if (error) {
-        throw new Error(`Failed to fetch pictures: ${error.message}`);
+        // If it's a JWT error, try to refresh the session
+        if (error.message.includes('JWT') || error.message.includes('expired')) {
+          console.warn('JWT expired, attempting to refresh session...');
+          await supabase.auth.signOut();
+          // Retry the request after clearing the session
+          const retryResult = await supabase
+            .from('pictures')
+            .select(`
+              id, 
+              title, 
+              image_url, 
+              category_id,
+              categories(id, name_am, slug)
+            `);
+          if (retryResult.error) {
+            throw new Error(`Failed to fetch pictures: ${retryResult.error.message}`);
+          }
+          // Use the retry result data
+          const transformedPictures = (retryResult.data || [])
+            .map(picture => ({
+              ...picture,
+              categories: Array.isArray(picture.categories) ? picture.categories[0] || null : picture.categories
+            }))
+            .filter(picture => {
+              const cat = picture.categories;
+              const name = cat?.name_am?.toLowerCase().trim();
+              const slug = cat?.slug?.toLowerCase().trim();
+              return !!name && name !== 'about me' && name !== 'hero' && slug !== 'hero';
+            }); // Exclude About Me and Hero categories (normalized)
+
+          // Group pictures by category and get one random representative image per category
+          const categoryMap = new Map<string, Picture[]>();
+          transformedPictures.forEach(picture => {
+            if (picture.categories) {
+              const categoryName = picture.categories.name_am;
+              if (!categoryMap.has(categoryName)) {
+                categoryMap.set(categoryName, []);
+              }
+              categoryMap.get(categoryName)!.push(picture);
+            }
+          });
+
+          // Select one random image from each category
+          const selectedPictures: Picture[] = [];
+          categoryMap.forEach((pictures, categoryName) => {
+            if (pictures.length > 0) {
+              const randomIndex = Math.floor(Math.random() * pictures.length);
+              selectedPictures.push(pictures[randomIndex]);
+            }
+          });
+
+          // Convert to service items
+          const serviceItems: ServiceItem[] = selectedPictures.map(picture => ({
+            title: picture.categories?.name_am || 'Service',
+            description: picture.title || '',
+            image: picture.image_url || '',
+            size: 'medium' as const
+          }));
+
+          setServices(serviceItems);
+          return;
+        } else {
+          throw new Error(`Failed to fetch pictures: ${error.message}`);
+        }
       }
 
       // Transform pictures data to handle Supabase's relationship structure
