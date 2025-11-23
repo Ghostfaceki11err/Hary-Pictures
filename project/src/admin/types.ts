@@ -26,7 +26,16 @@ export interface StorageUsage {
   error: string | null;
 }
 
-export type AdminSection = 'overview' | 'media' | 'categories' | 'gallery';
+export type AdminSection = 'overview' | 'dashboard' | 'media' | 'categories' | 'gallery';
+
+export interface ActivityItem {
+  id: string;
+  type: 'upload' | 'delete' | 'category_create' | 'category_delete' | 'category_update';
+  description: string;
+  timestamp: Date;
+  categoryName?: string;
+  pictureTitle?: string;
+}
 
 export type SortMode = 'newest' | 'oldest' | 'title';
 

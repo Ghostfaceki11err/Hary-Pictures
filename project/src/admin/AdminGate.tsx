@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import Login from './Login';
 import AdminPanel from './AdminPanel';
-import AdminLanding from './landing/AdminLanding';
 
 const AdminGate: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -63,7 +62,7 @@ const AdminGate: React.FC = () => {
     return <Login />;
   }
 
-  return <AdminLanding />;
+  return <AdminPanel initialSection="dashboard" />;
 };
 
 export default AdminGate;

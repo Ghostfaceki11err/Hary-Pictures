@@ -7,7 +7,6 @@ import About from './components/About';
 import Services from './components/Services';
 import Contact from './components/Contact';
 import { AdminPanel } from './admin';
-import AdminLanding from './admin/landing/AdminLanding';
 import AdminGate from './admin/AdminGate';
 import NotFound from './components/NotFound';
 

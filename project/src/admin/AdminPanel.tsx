@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent, useRef, useCallback, memo } from 'react';
 import { Upload, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
-import { Category, Picture, ToastType, ToastItem, AdminSection, SortMode, StorageUsage } from './types';
+import { Category, Picture, ToastType, ToastItem, AdminSection, SortMode, StorageUsage, ActivityItem } from './types';
 import { convertToWebP } from './utils/convertToWebP';
 import { STORAGE_BUCKET, STORAGE_PREFIX } from './utils/constants';
-import { AdminHeader } from './components/AdminHeader';
-import { AdminSidebar } from './components/AdminSidebar';
+import { AdminMenuBar } from './components/AdminMenuBar';
+import { OverviewSection } from './components/OverviewSection';
+import { DashboardSection } from './components/DashboardSection';
 import { MediaUploadSection } from './components/MediaUploadSection';
 import { CategoryManagement } from './components/CategoryManagement';
 import { GalleryView } from './components/GalleryView';
@@ -16,7 +17,7 @@ import { DeleteModals } from './components/DeleteModals';
 
 interface AdminPanelProps { initialSection?: AdminSection }
 
-const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview' }) => {
+const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboard' }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [selectedFilterCategoryId, setSelectedFilterCategoryId] = useState<string>('');
@@ -103,8 +104,20 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
   const [userEmail, setUserEmail] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Admin navigation (sidebar + bottom nav)
+  // Admin navigation (menu bar + bottom nav)
   const [activeSection, setActiveSection] = useState<AdminSection>(initialSection);
+
+  // Activity tracking
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+
+  const addActivity = useCallback((activity: Omit<ActivityItem, 'id' | 'timestamp'>) => {
+    const newActivity: ActivityItem = {
+      ...activity,
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      timestamp: new Date(),
+    };
+    setActivities(prev => [newActivity, ...prev].slice(0, 50)); // Keep last 50 activities
+  }, []);
 
   const showToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -182,7 +195,6 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
 
 
 
-  const headerRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -847,6 +859,11 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
         console.error(error);
         showToast('error', 'Error updating category: ' + error.message);
       } else {
+        addActivity({
+          type: 'category_update',
+          description: `Updated category "${am}"`,
+          categoryName: am,
+        });
         setEditingCategoryId(null);
         setNewCategoryAm('');
         setNewCategorySlug('');
@@ -862,6 +879,11 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
       console.error(error);
       showToast('error', 'Error adding category: ' + error.message);
     } else {
+      addActivity({
+        type: 'category_create',
+        description: `Created category "${am}"`,
+        categoryName: am,
+      });
       setNewCategoryAm('');
       setNewCategorySlug('');
       fetchCategories();
@@ -974,6 +996,12 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
           throw new Error(error.message || 'Unknown DB error');
         }
 
+        addActivity({
+          type: 'upload',
+          description: `Uploaded picture "${title.trim() || category.name_am}" to ${category.name_am}`,
+          categoryName: category.name_am,
+          pictureTitle: title.trim() || category.name_am,
+        });
         setTitle('');
         setImageUrl('');
         setSelectedCategory('');
@@ -1168,6 +1196,14 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
       fetchStorageUsage(); // Refresh storage usage after upload
       
       const successCount = uploadResults.length;
+      // Add activity for successful uploads
+      if (successCount > 0) {
+        addActivity({
+          type: 'upload',
+          description: `Uploaded ${successCount > 1 ? `${successCount} pictures` : '1 picture'} to ${selectedCategoryData.name_am}`,
+          categoryName: selectedCategoryData.name_am,
+        });
+      }
       if (successCount === totalFiles) {
         showToast('success', `All ${successCount} pictures uploaded successfully!`);
       } else {
@@ -1219,6 +1255,13 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
         throw error;
       }
 
+      const deletedPicture = pictures.find(p => p.id === pictureId);
+      addActivity({
+        type: 'delete',
+        description: `Deleted picture "${deletedPicture?.title || 'Untitled'}"`,
+        categoryName: deletedPicture?.categories?.name_am,
+        pictureTitle: deletedPicture?.title,
+      });
       fetchPictures();
       fetchStorageUsage(); // Refresh storage usage after deletion
       showToast('success', 'Picture deleted successfully');
@@ -1311,7 +1354,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
   }
 
   return (
-    <div className="min-h-screen pt-20 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 relative overflow-hidden">
+    <div className="min-h-screen pt-14 bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 relative overflow-hidden">
       {/* Animated Background Elements - Reduced on mobile for performance */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="hidden sm:block absolute -top-40 -right-40 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
@@ -1319,113 +1362,49 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-32 h-32 sm:w-64 sm:h-64 bg-pink-500/5 rounded-full blur-2xl animate-pulse delay-500"></div>
       </div>
 
-      {/* Header - show only on overview */}
-      {activeSection === 'overview' && (
-        <section ref={headerRef} className="relative py-20 text-center">
-          <AdminHeader
-            userEmail={userEmail}
-            onLogout={handleLogout}
-            categoriesCount={categories.length}
-            picturesCount={pictures.length}
-            storageUsed={formatBytes(storageUsage.used)}
-          />
-      </section>
-      )}
-
-      
+      {/* Menu Bar */}
+      <div className="pt-2">
+        <AdminMenuBar
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
+      </div>
 
       {/* Layout */}
       <section ref={uploadRef} className="pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[260px,1fr] gap-4 lg:gap-6">
-            {/* Sidebar */}
-            <aside className="space-y-6 sticky top-24 self-start">
-              <AdminSidebar
-                activeSection={activeSection}
-                onSectionChange={setActiveSection}
-                onNewCategory={() => setEditingCategoryId(null)}
-                onUploadClick={() => uploadRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                categoriesCount={categories.length}
-                picturesCount={pictures.length}
-                storageUsage={storageUsage}
-                onRetryStorage={fetchStorageUsage}
-              />
-
-              {/* Profile section - Media */}
-              {activeSection === 'media' && (
-                <ProfilePictureManager
-                  profilePictureLoading={profilePictureLoading}
-                  showCreateProfileCategory={showCreateProfileCategory}
-                  profilePictureCategory={profilePictureCategory}
-                  aboutMePictures={aboutMePictures}
-                  onCreateCategory={createAboutMeCategory}
-                  onCancelCreate={() => setShowCreateProfileCategory(false)}
-                  onShowUpload={() => setShowProfileUpload(true)}
-                  onImageClick={openCustomLightbox}
-                  onDeleteClick={handleAboutMeDeleteClick}
-                  showToast={showToast}
+          {/* Main content */}
+          <div className="space-y-8">
+              {/* Overview Section */}
+              {activeSection === 'overview' && (
+                <OverviewSection
+                  categories={categories}
+                  pictures={pictures}
+                  storageUsage={storageUsage}
+                  categoryIdToCount={categoryIdToCount}
+                  categoryIdToPreview={categoryIdToPreview}
+                  onSectionChange={(section) => setActiveSection(section)}
+                  onNewCategory={() => setEditingCategoryId(null)}
+                  onUploadClick={() => {
+                    setActiveSection('media');
+                    setTimeout(() => {
+                      uploadRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                  }}
                 />
               )}
 
-              {/* Hero section - Media */}
-              {activeSection === 'media' && (
-                <>
-                  <HeroImageManager
-                    heroPictureLoading={heroPictureLoading}
-                    showCreateHeroCategory={showCreateHeroCategory}
-                    heroCategory={heroCategory}
-                    heroPictures={heroPictures}
-                    onCreateCategory={createHeroCategory}
-                    onCancelCreate={() => setShowCreateHeroCategory(false)}
-                    onShowUpload={() => setShowHeroUpload(true)}
-                    onImageClick={openCustomLightbox}
-                    onDeleteClick={handleHeroDeleteClick}
-                    showToast={showToast}
-                  />
-
-                  {/* Upload Drawer */}
-                  {showHeroUpload && heroCategory && (
-                    <div className="mt-4 p-4 bg-slate-800/50 rounded-xl border border-white/10">
-                      <form onSubmit={handleHeroUpload} className="space-y-3">
-                        <input
-                          ref={heroFileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleHeroFileChange}
-                          className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700"
-                        />
-                        <input
-                          type="text"
-                          value={heroUploadTitle}
-                          onChange={(e) => setHeroUploadTitle(e.target.value)}
-                          placeholder="Optional title"
-                          className="w-full px-3 py-2 rounded-lg bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="submit"
-                            disabled={isHeroUploading}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                          >
-                            {isHeroUploading ? 'Uploading...' : 'Upload'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowHeroUpload(false)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  )}
-                </>
+              {/* Dashboard Section */}
+              {activeSection === 'dashboard' && (
+                <DashboardSection
+                  categories={categories}
+                  pictures={pictures}
+                  storageUsage={storageUsage}
+                  categoryIdToCount={categoryIdToCount}
+                  activities={activities}
+                />
               )}
-            </aside>
 
-            {/* Main content */}
-            <div className="space-y-8">
               {/* Enhanced Category Management - Categories */}
               {activeSection === 'categories' && (
                 <CategoryManagement
@@ -1480,6 +1459,78 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
                 </div>
               </div>
 
+              {/* Profile section - Media */}
+              {activeSection === 'media' && (
+                <ProfilePictureManager
+                  profilePictureLoading={profilePictureLoading}
+                  showCreateProfileCategory={showCreateProfileCategory}
+                  profilePictureCategory={profilePictureCategory}
+                  aboutMePictures={aboutMePictures}
+                  onCreateCategory={createAboutMeCategory}
+                  onCancelCreate={() => setShowCreateProfileCategory(false)}
+                  onShowUpload={() => setShowProfileUpload(true)}
+                  onImageClick={openCustomLightbox}
+                  onDeleteClick={handleAboutMeDeleteClick}
+                  showToast={showToast}
+                />
+              )}
+
+              {/* Hero section - Media */}
+              {activeSection === 'media' && (
+                <>
+                  <HeroImageManager
+                    heroPictureLoading={heroPictureLoading}
+                    showCreateHeroCategory={showCreateHeroCategory}
+                    heroCategory={heroCategory}
+                    heroPictures={heroPictures}
+                    onCreateCategory={createHeroCategory}
+                    onCancelCreate={() => setShowCreateHeroCategory(false)}
+                    onShowUpload={() => setShowHeroUpload(true)}
+                    onImageClick={openCustomLightbox}
+                    onDeleteClick={handleHeroDeleteClick}
+                    showToast={showToast}
+                  />
+
+                  {/* Upload Drawer */}
+                  {showHeroUpload && heroCategory && (
+                    <div className="p-4 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl">
+                      <form onSubmit={handleHeroUpload} className="space-y-3">
+                        <input
+                          ref={heroFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleHeroFileChange}
+                          className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700"
+                        />
+                        <input
+                          type="text"
+                          value={heroUploadTitle}
+                          onChange={(e) => setHeroUploadTitle(e.target.value)}
+                          placeholder="Optional title"
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={isHeroUploading}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-900 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                          >
+                            {isHeroUploading ? 'Uploading...' : 'Upload'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowHeroUpload(false)}
+                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Enhanced Upload Section - Media only */}
               {activeSection === 'media' && (
                 <MediaUploadSection
@@ -1527,7 +1578,6 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
                   deletingPictureId={deletingPictureId}
                 />
               )}
-            </div>
           </div>
         </div>
       </section>
@@ -1598,6 +1648,11 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
               .eq('id', catId);
             if (catErr) throw catErr;
 
+            addActivity({
+              type: 'category_delete',
+              description: `Deleted category "${deleteTargetInfo.name_am}"${deleteAlsoImages ? ` with ${deleteImageCount} pictures` : ''}`,
+              categoryName: deleteTargetInfo.name_am,
+            });
             await fetchCategories();
             await fetchPictures();
             setIsDeleteModalOpen(false);
