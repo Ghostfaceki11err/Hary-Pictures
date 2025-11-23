@@ -2,6 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Phone, MapPin, Clock, Send, Instagram, CheckCircle, AlertCircle, User, MessageSquare, Calendar, Camera, ArrowRight } from 'lucide-react';
 import { supabase } from '../admin/supabaseClient';
 
+// Custom TikTok icon component
+const TikTokIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+  </svg>
+);
+
 // Custom Telegram SVG component
 const TelegramIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -56,6 +70,7 @@ const Contact: React.FC = () => {
   const [userAnswer, setUserAnswer] = useState<string>('');
   const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [telegramValidationStatus, setTelegramValidationStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
+  const [emailValidationStatus, setEmailValidationStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
 
   // Refs for form fields
   const nameRef = useRef<HTMLInputElement>(null);
@@ -306,6 +321,7 @@ const Contact: React.FC = () => {
 
   // Debounced validation for real-time feedback
   const debouncedTelegramValidation = useRef<NodeJS.Timeout | null>(null);
+  const debouncedEmailValidation = useRef<NodeJS.Timeout | null>(null);
   
   const validateTelegramRealTime = (username: string) => {
     if (debouncedTelegramValidation.current) {
@@ -325,6 +341,24 @@ const Contact: React.FC = () => {
     }, 500);
   };
 
+  const validateEmailRealTime = (email: string) => {
+    if (debouncedEmailValidation.current) {
+      clearTimeout(debouncedEmailValidation.current);
+    }
+    
+    if (!email || email.trim() === '') {
+      setEmailValidationStatus('idle');
+      return;
+    }
+    
+    setEmailValidationStatus('checking');
+    
+    debouncedEmailValidation.current = setTimeout(() => {
+      const isValid = validateEmail(email);
+      setEmailValidationStatus(isValid ? 'valid' : 'invalid');
+    }, 500);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
@@ -335,6 +369,14 @@ const Contact: React.FC = () => {
         ...prev,
         [name]: formattedPhone
       }));
+    } else if (name === 'email') {
+      const sanitizedValue = sanitizeInput(value);
+      setFormData(prev => ({
+        ...prev,
+        [name]: sanitizedValue
+      }));
+      // Real-time validation
+      validateEmailRealTime(sanitizedValue);
     } else if (name === 'telegram') {
       const formattedTelegram = formatTelegramUsername(value);
       setFormData(prev => ({
@@ -632,7 +674,7 @@ ${sanitizedData.message}
   ];
 
   return (
-    <div className="min-h-screen pt-20 relative overflow-hidden">
+    <div className="min-h-screen pt-20 relative overflow-hidden bg-black">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
@@ -645,41 +687,6 @@ ${sanitizedData.message}
       <div className="absolute top-40 right-20 w-6 h-6 bg-purple-400/30 rounded-full animate-bounce delay-700"></div>
       <div className="absolute bottom-40 left-20 w-3 h-3 bg-cyan-400/30 rounded-full animate-bounce delay-1000"></div>
       <div className="absolute top-60 right-1/3 w-5 h-5 bg-pink-400/30 rounded-full animate-bounce delay-500"></div>
-
-      {/* Hero Section */}
-      <section className="relative py-24 text-center">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="inline-block relative">
-            <div className="absolute -inset-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl"></div>
-            <div className="relative bg-slate-800/50 backdrop-blur-sm rounded-2xl p-8 border border-slate-700/50">
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-bold bg-gradient-to-r from-white via-blue-100 to-purple-100 bg-clip-text text-transparent mb-6 leading-tight">
-                Let's Create
-                <br />
-                <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                  Magic Together
-                </span>
-              </h1>
-              <p className="text-lg sm:text-xl text-gray-300 leading-relaxed max-w-2xl mx-auto">
-                Ready to capture your precious moments? Let's discuss your photography vision and bring your dreams to life.
-              </p>
-              <div className="mt-8 flex flex-wrap justify-center gap-4">
-                <div className="flex items-center gap-2 text-blue-400">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <span className="text-sm font-medium">Professional Photography</span>
-                </div>
-                <div className="flex items-center gap-2 text-purple-400">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse delay-300"></div>
-                  <span className="text-sm font-medium">Creative Vision</span>
-                </div>
-                <div className="flex items-center gap-2 text-cyan-400">
-                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse delay-500"></div>
-                  <span className="text-sm font-medium">Memorable Moments</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Contact Form & Info */}
       <section className="pb-20 relative">
@@ -777,6 +784,10 @@ ${sanitizedData.message}
                             onClick={() => {
                               setFormData(prev => ({ ...prev, contactType: 'email' }));
                               handleFieldFocus('contactType');
+                              // Validate email if it has a value
+                              if (formData.email) {
+                                validateEmailRealTime(formData.email);
+                              }
                             }}
                             className={`relative z-10 flex-1 flex items-center justify-center py-2 px-3 rounded-lg transition-all duration-300 ${
                               formData.contactType === 'email' 
@@ -794,6 +805,8 @@ ${sanitizedData.message}
                             onClick={() => {
                               setFormData(prev => ({ ...prev, contactType: 'telegram' }));
                               handleFieldFocus('contactType');
+                              // Reset email validation when switching to Telegram
+                              setEmailValidationStatus('idle');
                             }}
                             className={`relative z-10 flex-1 flex items-center justify-center py-2 px-3 rounded-lg transition-all duration-300 ${
                               formData.contactType === 'telegram' 
@@ -833,34 +846,64 @@ ${sanitizedData.message}
                         <Mail className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
                           focusedField === 'email' ? 'text-blue-400' : 'text-gray-400'
                         }`} />
-                    <input
-                          ref={emailRef}
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                          onKeyDown={(e) => handleKeyDown(e, 'email')}
-                          onFocus={() => handleFieldFocus('email')}
-                          onBlur={handleFieldBlur}
-                          required={formData.contactType === 'email'}
-                          className={`w-full pl-12 pr-4 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 ${
-                            focusedField === 'email' 
-                              ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                              : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                          }`}
-                      placeholder="your@email.com"
-                    />
-                        <label 
-                          htmlFor="email" 
-                          className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                            formData.email || focusedField === 'email'
-                              ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                              : 'top-2 text-sm text-gray-400'
-                          }`}
-                        >
-                          Email Address *
-                        </label>
+                    <div className="relative">
+                      <input
+                        ref={emailRef}
+                        type="email"
+                        id="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        onKeyDown={(e) => handleKeyDown(e, 'email')}
+                        onFocus={() => handleFieldFocus('email')}
+                        onBlur={handleFieldBlur}
+                        required={formData.contactType === 'email'}
+                        className={`w-full pl-12 pr-12 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 ${
+                          emailValidationStatus === 'valid' 
+                            ? 'border-green-500 bg-slate-700/80 shadow-lg shadow-green-500/20'
+                            : emailValidationStatus === 'invalid'
+                            ? 'border-red-500 bg-slate-700/80 shadow-lg shadow-red-500/20'
+                            : focusedField === 'email' 
+                            ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
+                            : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
+                        }`}
+                        placeholder="your@email.com"
+                      />
+                      {/* Validation status icon */}
+                      {formData.email && emailValidationStatus !== 'idle' && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          {emailValidationStatus === 'checking' && (
+                            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                          {emailValidationStatus === 'valid' && (
+                            <CheckCircle className="w-5 h-5 text-green-400" />
+                          )}
+                          {emailValidationStatus === 'invalid' && (
+                            <AlertCircle className="w-5 h-5 text-red-400" />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <label 
+                      htmlFor="email" 
+                      className={`absolute left-12 transition-all duration-300 pointer-events-none ${
+                        formData.email || focusedField === 'email'
+                          ? emailValidationStatus === 'valid'
+                            ? 'top-1 text-xs text-green-400 bg-slate-800/50 px-1 rounded'
+                            : emailValidationStatus === 'invalid'
+                            ? 'top-1 text-xs text-red-400 bg-slate-800/50 px-1 rounded'
+                            : 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
+                          : 'top-2 text-sm text-gray-400'
+                      }`}
+                    >
+                      Email Address *
+                      {formData.email && emailValidationStatus === 'valid' && (
+                        <span className="ml-2 text-green-400">✓ Valid</span>
+                      )}
+                      {formData.email && emailValidationStatus === 'invalid' && (
+                        <span className="ml-2 text-red-400">✗ Invalid email format</span>
+                      )}
+                    </label>
                       </>
                     ) : (
                       <>
@@ -1420,6 +1463,44 @@ ${sanitizedData.message}
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <section className="py-12 bg-black border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center text-gray-400 text-sm">
+            <p>Copyright © 2025</p>
+            <div className="flex gap-6 mt-4 sm:mt-0">
+              <a 
+                href="https://www.instagram.com/hary_picture7?igsh=MXFqeDFmeGFxdXRzNQ==" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+              >
+                <Instagram size={20} />
+              </a>
+              <a 
+                href="https://t.me/harygraphic" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="Telegram"
+              >
+                <TelegramIcon width={20} height={20} />
+              </a>
+              <a 
+                href="https://www.tiktok.com/@hary.picture?_t=ZM-90Pkwl5a2HM&_r=1" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+              >
+                <TikTokIcon size={20} />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
       
     </div>
   );

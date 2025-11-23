@@ -1,9 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Award, Heart, Users, MapPin, Calendar, Sun, Moon } from 'lucide-react';
+import { Camera, Award, Heart, Users, MapPin, Calendar, Instagram } from 'lucide-react';
 import { supabase } from '../admin/supabaseClient';
 
+// Custom TikTok icon component
+const TikTokIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
+  </svg>
+);
+
+// Custom Telegram icon component
+const TelegramIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.169 1.858-.896 6.728-.896 6.728-.896 6.728-1.277 5.66-1.277 5.66s-.17.34-.425.41c-.34.085-.596-.056-.596-.056l-2.55-1.888-1.445-1.002s-.255-.17-.17-.51c.085-.34.425-.68.425-.68l2.04-1.956s.255-.17.255-.425c0-.17-.17-.255-.17-.255L6.8 9.616s-.34-.085-.51.085c-.17.17-.085.425-.085.425l1.53 4.93s.085.34-.085.51c-.17.17-.425.085-.425.085l-1.956-.34s-.34-.085-.34-.34c0-.17.17-.34.17-.34l7.48-4.585s.34-.17.51-.085c.17.085.17.34.17.34l-1.53 4.93s-.085.34.085.51c.17.17.425.085.425.085l1.956.34s.34.085.34.34c0 .17-.17.34-.17.34l-2.55 1.888s-.34.17-.51.085c-.17-.085-.17-.34-.17-.34l1.53-4.93s.085-.34-.085-.51c-.17-.17-.425-.085-.425-.085l-1.956-.34s-.34-.085-.34-.34c0-.17.17-.34.17-.34l7.48-4.585s.34-.17.51-.085c.17.085.17.34.17.34z"/>
+  </svg>
+);
+
 const About: React.FC = () => {
-  const [darkMode, setDarkMode] = useState(false);
   const [aboutMeImage, setAboutMeImage] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(true);
 
@@ -51,32 +78,9 @@ const About: React.FC = () => {
   };
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme === 'dark') {
-      setDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove('dark');
-    }
-    
     // Fetch About Me image
     fetchAboutMeImage();
   }, []);
-
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => {
-      const newMode = !prev;
-      if (newMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-      }
-      return newMode;
-    });
-  };
 
   const skills = [
     { name: 'Photography', level: 95 },
@@ -95,23 +99,14 @@ const About: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen pt-20 bg-white text-blue-900 dark:bg-slate-900 dark:text-white">
-      {/* Floating Dark/Light Mode Button */}
-      <button
-        className="fixed bottom-8 right-8 z-50 w-14 h-14 flex items-center justify-center rounded-full shadow-lg bg-white/90 dark:bg-slate-800 text-blue-900 dark:text-yellow-300 border border-blue-200 dark:border-slate-700 transition-colors duration-300 hover:bg-blue-100 dark:hover:bg-slate-700"
-        onClick={toggleDarkMode}
-        aria-label="Toggle dark mode"
-      >
-        {darkMode ? <Sun size={28} /> : <Moon size={28} />}
-      </button>
-
+    <div className="min-h-screen pt-20 bg-black text-white">
       {/* Header */}
       <section className="py-20 text-center">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-5xl sm:text-6xl font-bold mb-6">
+          <h1 className="text-5xl sm:text-6xl font-bold text-white mb-6">
             About Me
           </h1>
-          <p className="text-xl leading-relaxed">
+          <p className="text-xl text-gray-300 leading-relaxed">
             Passionate photographer dedicated to capturing life's most precious moments
           </p>
         </div>
@@ -149,18 +144,18 @@ const About: React.FC = () => {
 
             {/* Bio Content */}
             <div className="space-y-6">
-              <h2 className="text-4xl font-bold mb-6">
+              <h2 className="text-4xl font-bold text-white mb-6">
                 Hello, I'm Fasika
               </h2>
               
-              <p className="text-lg leading-relaxed">
+              <p className="text-lg text-gray-300 leading-relaxed">
                — a passionate photographer with a lifelong love for capturing moments. 
               My journey began as a curious kid snapping photos on my parents' mobile phone, 
               fascinated by the magic of freezing time with a single click. In my teenage years, I started exploring photography 
               more seriously with my own phone, experimenting with light, angles, and storytelling through images.
               </p>
               
-              <p className="text-lg leading-relaxed">
+              <p className="text-lg text-gray-300 leading-relaxed">
                 Today, I've turned that childhood passion into a professional pursuit. 
                 Equipped with a full photography setup, I dedicate myself to creating stunning 
                 visuals that tell stories, evoke emotions, and preserve memories. Beyond photography, 
@@ -184,7 +179,7 @@ const About: React.FC = () => {
 
           {/* Skills Section */}
           <div className="mb-20">
-            <h3 className="text-3xl font-bold text-center mb-12">
+            <h3 className="text-3xl font-bold text-white text-center mb-12">
               My Expertise
             </h3>
             
@@ -192,10 +187,10 @@ const About: React.FC = () => {
               {skills.map((skill, index) => (
                 <div key={index} className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="font-medium">{skill.name}</span>
+                    <span className="font-medium text-white">{skill.name}</span>
                     <span className="text-blue-400 font-semibold">{skill.level}%</span>
                   </div>
-                  <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                  <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-1000 ease-out"
                       style={{ width: `${skill.level}%` }}
@@ -208,7 +203,7 @@ const About: React.FC = () => {
 
           {/* Achievements */}
           <div>
-            <h3 className="text-3xl font-bold text-center mb-12">
+            <h3 className="text-3xl font-bold text-white text-center mb-12">
               Achievements & Milestones
             </h3>
             
@@ -221,8 +216,8 @@ const About: React.FC = () => {
                   <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4 group-hover:bg-blue-500 transition-colors duration-300">
                     <achievement.icon size={32} className="text-white" />
                   </div>
-                  <h4 className="text-xl font-bold mb-2">{achievement.title}</h4>
-                  <p className="text-sm leading-relaxed">{achievement.description}</p>
+                  <h4 className="text-xl font-bold text-white mb-2">{achievement.title}</h4>
+                  <p className="text-sm text-gray-300 leading-relaxed">{achievement.description}</p>
                 </div>
               ))}
             </div>
@@ -231,10 +226,10 @@ const About: React.FC = () => {
       </section>
       
       {/* Services Offered Section */}
-      <section className="py-12">
+      <section className="py-12 bg-slate-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h3 className="text-3xl font-bold mb-8 text-center">Services Offered</h3>
-          <ul className="list-disc list-inside text-lg space-y-2 mx-auto max-w-xl">
+          <h3 className="text-3xl font-bold text-white mb-8 text-center">Services Offered</h3>
+          <ul className="list-disc list-inside text-lg text-gray-300 space-y-2 mx-auto max-w-xl">
             <li>Wedding photography</li>
             <li>Event photography</li>
             <li>Family event</li>
@@ -250,15 +245,53 @@ const About: React.FC = () => {
       </section>
 
       {/* Philosophy Section */}
-      <section className="py-20">
+      <section className="py-20 bg-black">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h3 className="text-3xl font-bold mb-8">
+          <h3 className="text-3xl font-bold text-white mb-8">
              
           </h3>
-          <blockquote className="text-2xl italic leading-relaxed">
+          <blockquote className="text-2xl text-white italic leading-relaxed">
             "Just like your beauty! "
           </blockquote>
           <cite className="block text-blue-400 font-semibold mt-6">  </cite>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <section className="py-12 bg-black border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center text-gray-400 text-sm">
+            <p>Copyright © 2025</p>
+            <div className="flex gap-6 mt-4 sm:mt-0">
+              <a 
+                href="https://www.instagram.com/hary_picture7?igsh=MXFqeDFmeGFxdXRzNQ==" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+              >
+                <Instagram size={20} />
+              </a>
+              <a 
+                href="https://t.me/harygraphic" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="Telegram"
+              >
+                <TelegramIcon size={20} />
+              </a>
+              <a 
+                href="https://www.tiktok.com/@hary.picture?_t=ZM-90Pkwl5a2HM&_r=1" 
+                className="hover:text-white transition-colors duration-300" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+              >
+                <TikTokIcon size={20} />
+              </a>
+            </div>
+          </div>
         </div>
       </section>
     </div>
