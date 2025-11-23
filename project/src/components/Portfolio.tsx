@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Camera, X } from 'lucide-react';
+import { Camera, X, Video } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import Slideshow from 'yet-another-react-lightbox/plugins/slideshow';
+import VideoPlugin from 'yet-another-react-lightbox/plugins/video';
 import { supabase } from '../admin/supabaseClient';
 import { checkEnvironment } from '../utils/envCheck';
+import { isVideoUrl, getMediaType } from '../admin/utils/mediaTypeDetection';
 // JWT error handling is now built into the fetch function
 
 // Supabase interfaces
@@ -373,14 +375,32 @@ const Portfolio: React.FC = () => {
                   }
                 }}
               >
-                {/* Show image if available, else fallback to gradient */}
+                {/* Show image/video if available, else fallback to gradient */}
                 {item.image ? (
-                  <img
-                    src={item.image}
-                    alt={item.title}
-                    className="aspect-square w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
-                    loading="lazy"
-                  />
+                  isVideoUrl(item.image) ? (
+                    <div className="aspect-square w-full h-full bg-slate-800 relative overflow-hidden">
+                      <video
+                        src={item.image}
+                        className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                        muted
+                        playsInline
+                        preload="metadata"
+                        loop
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="p-3 bg-black/50 rounded-full backdrop-blur-sm">
+                          <Video className="w-8 h-8 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      className="aspect-square w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  )
                 ) : (
                 <div className="aspect-square bg-gradient-to-br from-blue-600 via-purple-600 to-cyan-500 opacity-80 group-hover:opacity-90 transition-opacity duration-300"></div>
                 )}
@@ -410,16 +430,46 @@ const Portfolio: React.FC = () => {
         </div>
       </section>
 
-      {/* Lightbox Modal for images */}
+      {/* Lightbox Modal for images and videos */}
       {lightboxOpen && (
         <Lightbox
           open={lightboxOpen}
           close={() => setLightboxOpen(false)}
           index={lightboxIndex}
-          slides={filteredItems.filter(i => i.image).map(i => ({ src: i.image!, title: i.title, description: i.description }))}
+          slides={filteredItems.filter(i => i.image).map(i => {
+            const isVideo = isVideoUrl(i.image!);
+            const baseSlide = {
+              title: i.title,
+              description: i.description
+            };
+            
+            if (isVideo) {
+              return {
+                ...baseSlide,
+                type: 'video' as const,
+                sources: [
+                  {
+                    src: i.image!,
+                    type: 'video/webm'
+                  }
+                ]
+              };
+            }
+            
+            return {
+              ...baseSlide,
+              src: i.image!
+            };
+          })}
           on={{ view: ({ index }) => setLightboxIndex(index) }}
-          plugins={[Fullscreen, Zoom, Slideshow]}
+          plugins={[Fullscreen, Zoom, Slideshow, VideoPlugin]}
           slideshow={{ delay: 8000 }}
+          video={{
+            autoPlay: true,
+            playsInline: true,
+            controls: true,
+            preload: 'auto'
+          }}
           render={{
             slideHeader: () => (
               <div className="absolute top-4 left-4 z-50">

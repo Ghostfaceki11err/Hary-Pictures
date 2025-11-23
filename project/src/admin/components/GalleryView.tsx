@@ -1,13 +1,15 @@
 import React, { useRef } from 'react';
-import { Camera, Trash2, Eye } from 'lucide-react';
+import { Camera, Trash2, Eye, Video } from 'lucide-react';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
 import Zoom from 'yet-another-react-lightbox/plugins/zoom';
 import Slideshow from 'yet-another-react-lightbox/plugins/slideshow';
+import VideoPlugin from 'yet-another-react-lightbox/plugins/video';
 import { Category, Picture, SortMode } from '../types';
 import { OptimizedImage } from './OptimizedImage';
 import { isAboutMeCategory } from '../utils/categoryHelpers';
+import { isVideoUrl, getMediaType } from '../utils/mediaTypeDetection';
 
 interface GalleryViewProps {
   pictures: Picture[];
@@ -21,7 +23,7 @@ interface GalleryViewProps {
   categoryIdToPreview: Record<string, string>;
   lightboxOpen: boolean;
   lightboxIndex: number;
-  customLightboxSlides: Array<{ src: string; title?: string; description?: string }> | null;
+  customLightboxSlides: Array<{ src?: string; type?: 'video'; sources?: Array<{ src: string; type: string }>; title?: string; description?: string }> | null;
   onImageClick: (index: number) => void;
   onCloseLightbox: () => void;
   onDeleteClick: (pictureId: string, imageUrl: string) => void;
@@ -48,11 +50,31 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 }) => {
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const lightboxSlides = filteredPictures.map(pic => ({ 
-    src: pic.image_url, 
-    title: pic.title, 
-    description: pic.categories?.name_am 
-  }));
+  const lightboxSlides = filteredPictures.map(pic => {
+    const isVideo = isVideoUrl(pic.image_url);
+    const baseSlide = {
+      title: pic.title,
+      description: pic.categories?.name_am
+    };
+    
+    if (isVideo) {
+      return {
+        ...baseSlide,
+        type: 'video' as const,
+        sources: [
+          {
+            src: pic.image_url,
+            type: 'video/webm'
+          }
+        ]
+      };
+    }
+    
+    return {
+      ...baseSlide,
+      src: pic.image_url
+    };
+  });
 
   return (
     <>
@@ -145,13 +167,35 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur hover:border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl sm:hover:scale-105" 
                 onClick={() => onImageClick(index)}
               >
-                {/* Image Container */}
+                {/* Image/Video Container */}
                 <div className="relative aspect-square overflow-hidden">
-                  <OptimizedImage 
-                    src={pic.image_url} 
-                    alt={pic.title} 
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110" 
-                  />
+                  {isVideoUrl(pic.image_url) ? (
+                    <div className="w-full h-full bg-slate-800 flex items-center justify-center">
+                      <video 
+                        src={pic.image_url}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110"
+                        muted={true}
+                        playsInline
+                        preload="metadata"
+                        loop
+                        onMouseEnter={(e) => {
+                          // Optional: play on hover for preview
+                          // e.currentTarget.play().catch(() => {});
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="p-3 bg-black/50 rounded-full backdrop-blur-sm">
+                          <Video className="w-8 h-8 text-white" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <OptimizedImage 
+                      src={pic.image_url} 
+                      alt={pic.title} 
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110" 
+                    />
+                  )}
                   
                   {/* Gradient Overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -204,7 +248,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                       {pic.categories?.name_am}
                     </span>
                     <span className="text-xs bg-white/10 px-2 py-1 rounded-full">
-                      WebP
+                      {isVideoUrl(pic.image_url) ? 'WebM' : 'WebP'}
                     </span>
                   </div>
                 </div>
@@ -229,8 +273,14 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
           index={lightboxIndex}
           slides={customLightboxSlides || lightboxSlides}
           on={{ view: ({ index }) => onImageClick(index) }}
-          plugins={[Fullscreen, Zoom, Slideshow]}
+          plugins={[Fullscreen, Zoom, Slideshow, VideoPlugin]}
           slideshow={{ delay: 8000 }}
+          video={{
+            autoPlay: true,
+            playsInline: true,
+            controls: true,
+            preload: 'auto'
+          }}
           render={{
             slideHeader: () => (
               <div className="absolute top-4 left-4 z-50">

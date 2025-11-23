@@ -29,7 +29,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
   const [files, setFiles] = useState<File[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [customLightboxSlides, setCustomLightboxSlides] = useState<Array<{ src: string; title?: string; description?: string }> | null>(null);
+  const [customLightboxSlides, setCustomLightboxSlides] = useState<Array<{ src?: string; type?: 'video'; sources?: Array<{ src: string; type: string }>; title?: string; description?: string }> | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -37,6 +37,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
   const [deletingPictureId, setDeletingPictureId] = useState<string | null>(null);
   const [useUrlUpload, setUseUrlUpload] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
+  const [mediaType, setMediaType] = useState<'pictures' | 'videos'>('pictures');
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -99,6 +100,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
   const [showConversionPrompt, setShowConversionPrompt] = useState(false);
   const [filesToConvert, setFilesToConvert] = useState<File[]>([]);
   const [webpFiles, setWebpFiles] = useState<File[]>([]);
+  
 
   // Authentication state
   const [userEmail, setUserEmail] = useState<string>('');
@@ -133,7 +135,34 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
   }, []);
 
   const openCustomLightbox = useCallback((images: Array<{ src: string; title?: string; description?: string }>, startIndex: number = 0) => {
-    setCustomLightboxSlides(images);
+    // Convert images array to lightbox slides with video support
+    const slides = images.map(img => {
+      const isVideo = img.src.toLowerCase().match(/\.(webm|mp4|mov|avi|mkv|m4v|ogv)(\?|$)/i) !== null;
+      const baseSlide = {
+        title: img.title,
+        description: img.description
+      };
+      
+      if (isVideo) {
+        return {
+          ...baseSlide,
+          type: 'video' as const,
+          sources: [
+            {
+              src: img.src,
+              type: 'video/webm'
+            }
+          ]
+        };
+      }
+      
+      return {
+        ...baseSlide,
+        src: img.src
+      };
+    });
+    
+    setCustomLightboxSlides(slides as any);
     setLightboxIndex(startIndex);
     setLightboxOpen(true);
   }, []);
@@ -312,6 +341,18 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
   const isHeroCategory = (category: Category): boolean => {
     return category.name_am === 'Hero' && category.slug === 'hero';
   };
+
+  // Force pictures mode when About Me or Hero category is selected
+  useEffect(() => {
+    const selectedCat = categories.find(c => c.id === selectedCategory);
+    if (selectedCat && (isAboutMeCategory(selectedCat) || isHeroCategory(selectedCat))) {
+      if (mediaType === 'videos') {
+        setMediaType('pictures');
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    }
+  }, [selectedCategory, categories, mediaType]);
 
   // About Me Image Functions
   const fetchAboutMeCategory = async () => {
@@ -892,26 +933,38 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
     setIsAddingCategory(false);
   }
 
-  // Handle file input - Multiple files (PNG, JPG, JFIF, WebP)
+  // Handle file input - Multiple files (PNG, JPG, JFIF, WebP for pictures, video formats for videos)
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files);
       const validFiles: File[] = [];
       
-      // Validate each file
+      // Validate each file based on media type
       for (const file of selectedFiles) {
-        const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
-                               file.name.toLowerCase().match(/\.(jfif|jpe)$/);
-        
-        if (!isSupportedType) {
-          const isAboutMeCategory = selectedCategory === profilePictureCategory?.id;
-          const message = isAboutMeCategory 
-            ? `File "${file.name}" is not a supported image format. About Me images must be PNG, JPG, JFIF, or WebP format.`
-            : `File "${file.name}" is not a supported image format. Only PNG, JPG, JFIF, and WebP images are allowed.`;
-          showToast('error', message);
-          continue;
+        if (mediaType === 'pictures') {
+          const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
+                                 file.name.toLowerCase().match(/\.(jfif|jpe)$/);
+          
+          if (!isSupportedType) {
+            const isAboutMeCategory = selectedCategory === profilePictureCategory?.id;
+            const message = isAboutMeCategory 
+              ? `File "${file.name}" is not a supported image format. About Me images must be PNG, JPG, JFIF, or WebP format.`
+              : `File "${file.name}" is not a supported image format. Only PNG, JPG, JFIF, and WebP images are allowed.`;
+            showToast('error', message);
+            continue;
+          }
+          validFiles.push(file);
+        } else {
+          // Video files
+          const isSupportedType = file.type.match(/^video\//) || 
+                                 file.name.toLowerCase().match(/\.(mp4|webm|mov|avi|mkv)$/);
+          
+          if (!isSupportedType) {
+            showToast('error', `File "${file.name}" is not a supported video format. Only MP4, WebM, MOV, AVI, and MKV videos are allowed.`);
+            continue;
+          }
+          validFiles.push(file);
         }
-        validFiles.push(file);
       }
       
       if (validFiles.length === 0) {
@@ -921,7 +974,8 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
       }
       
       if (validFiles.length < selectedFiles.length) {
-        showToast('info', `Selected ${validFiles.length} valid WebP files out of ${selectedFiles.length} total files.`);
+        const mediaTypeText = mediaType === 'pictures' ? 'image' : 'video';
+        showToast('info', `Selected ${validFiles.length} valid ${mediaTypeText} file(s) out of ${selectedFiles.length} total files.`);
       }
       
       setFiles(validFiles);
@@ -946,14 +1000,13 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
     }
   }
 
-  // Upload pictures (WebP-only, path: public/<slug>/<timestamp>.webp)
+  // Upload pictures (WebP-only, path: public/<slug>/<timestamp>.webp) or videos
   async function handleUpload(e: FormEvent) {
     e.preventDefault();
     if ((!useUrlUpload && files.length === 0) || (useUrlUpload && !imageUrl) || !selectedCategory) {
       showToast('error', 'Please provide all required fields: files or URL and a category');
       return;
     }
-
 
     if (!isValidUUID(selectedCategory)) {
       showToast('error', 'Please select a valid category');
@@ -965,6 +1018,12 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
     if (!category) {
       showToast('error', 'Selected category does not exist. Please refresh and try again.');
       setSelectedCategory('');
+      return;
+    }
+
+    // Route to video upload if media type is videos
+    if (mediaType === 'videos') {
+      await handleVideoUpload();
       return;
     }
 
@@ -1051,32 +1110,237 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
     await proceedWithUpload(webpFiles);
   };
 
+  // Upload videos (path: public/<slug>/<timestamp>.<original-extension>)
+  async function handleVideoUpload() {
+    if (files.length === 0) {
+      showToast('error', 'Please select video files');
+      return;
+    }
+
+    const category = categories.find(c => c.id === selectedCategory);
+    if (!category) {
+      showToast('error', 'Selected category not found');
+      return;
+    }
+
+    // Validate that files are videos
+    const invalidFiles = files.filter(file => 
+      !file.type.match(/^video\//) && 
+      !file.name.toLowerCase().match(/\.(mp4|webm|mov|avi|mkv|m4v|ogv|wmv|flv|3gp|mpg|mpeg)$/i)
+    );
+
+    // Show error for invalid files
+    if (invalidFiles.length > 0) {
+      showToast('error', `Invalid file format(s): ${invalidFiles.map(f => f.name).join(', ')}. Please select video files.`);
+      return;
+    }
+
+    // Proceed with upload directly (no conversion)
+    await proceedWithVideoUpload(files);
+  }
+
+  const proceedWithVideoUpload = async (filesToUpload: File[]) => {
+    if (filesToUpload.length === 0) return;
+
+    const category = categories.find(c => c.id === selectedCategory);
+    if (!category) {
+      showToast('error', 'Selected category not found');
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadProgresses({});
+    
+    try {
+      const MAX_CONCURRENT = 3; // Upload 3 files concurrently
+      const uploadResults: Array<{ fileName: string; success: boolean; publicUrl: string; title: string }> = [];
+      const totalFiles = filesToUpload.length;
+      
+      // Process files in batches for better performance
+      for (let i = 0; i < filesToUpload.length; i += MAX_CONCURRENT) {
+        const batch = filesToUpload.slice(i, i + MAX_CONCURRENT);
+        const timestamp = Date.now();
+        
+        // Upload batch in parallel
+        const batchPromises = batch.map(async (file, batchIndex) => {
+          const globalIndex = i + batchIndex;
+          const fileKey = `${file.name}-${globalIndex}`;
+          
+          // Preserve original file extension
+          const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4';
+          const finalFileName = `${timestamp}-${globalIndex}.${fileExt}`;
+          const objectPath = `${STORAGE_PREFIX}/${category.slug}/${finalFileName}`;
+          
+          // Set initial progress for this file
+          setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
+        
+          // Simulate progress updates
+          const progressInterval = setInterval(() => {
+            setUploadProgresses(prev => {
+              const current = prev[fileKey] || 0;
+              if (current >= 90) {
+                clearInterval(progressInterval);
+                return prev;
+              }
+              return { ...prev, [fileKey]: current + Math.random() * 15 };
+            });
+          }, 200);
+        
+          try {
+            const { data: fileData, error: uploadError } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .upload(objectPath, file, { upsert: true });
+
+            clearInterval(progressInterval);
+            setUploadProgresses(prev => ({ ...prev, [fileKey]: 100 }));
+
+            if (uploadError || !fileData || !fileData.path) {
+              const message = uploadError?.message || 'Upload failed: no file path returned.';
+              console.error('Supabase Storage upload error for', file.name, ':', uploadError);
+              throw new Error(`Failed to upload ${file.name}: ${message}`);
+            }
+
+            // Get public URL for the same object path
+            const { data: { publicUrl } } = supabase.storage
+              .from(STORAGE_BUCKET)
+              .getPublicUrl(objectPath);
+
+            if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
+              throw new Error(`Failed to retrieve a valid public URL for ${file.name}.`);
+            }
+
+            const derivedTitle = title.trim() || category.name_am || (file.name.replace(/\.[^.]+$/, '')) || `Video ${timestamp}-${globalIndex}`;
+
+            return {
+              fileName: file.name,
+              success: true,
+              publicUrl,
+              title: derivedTitle
+            };
+          } catch (error) {
+            clearInterval(progressInterval);
+            setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
+            throw error;
+          }
+        });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Process results
+        batchResults.forEach((result, batchIndex) => {
+          if (result.status === 'fulfilled') {
+            uploadResults.push(result.value);
+          } else {
+            console.error('Upload failed for file in batch:', result.reason);
+            showToast('error', `Failed to upload file: ${result.reason.message || 'Unknown error'}`);
+          }
+        });
+        
+        // Update overall progress
+        setUploadProgress(((i + batch.length) / totalFiles) * 100);
+      }
+      
+      // Batch insert all successful uploads at once
+      if (uploadResults.length > 0) {
+        const records = uploadResults.map(result => ({
+          title: result.title,
+          image_url: result.publicUrl,
+          category_id: category.id
+        }));
+        
+        const { error: dbError } = await supabase.from('pictures').insert(records);
+        
+        if (dbError) {
+          console.error('Batch database insert error:', dbError);
+          throw new Error(`Failed to save records to database: ${dbError.message || 'Unknown DB error'}`);
+        }
+      }
+
+      // Clear form
+      setTitle('');
+      setFiles([]);
+      setSelectedCategory('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      fetchPictures();
+      fetchStorageUsage(); // Refresh storage usage after upload
+      
+      const successCount = uploadResults.length;
+      // Add activity for successful uploads
+      if (successCount > 0) {
+        addActivity({
+          type: 'upload',
+          description: `Uploaded ${successCount > 1 ? `${successCount} videos` : '1 video'} to ${category.name_am}`,
+          categoryName: category.name_am,
+        });
+      }
+      if (successCount === totalFiles) {
+        showToast('success', `All ${successCount} videos uploaded successfully!`);
+      } else if (successCount > 0) {
+        showToast('success', `${successCount} out of ${totalFiles} videos uploaded successfully.`);
+      }
+    } catch (error) {
+      const err = error as any;
+      const msg = err?.message || JSON.stringify(err);
+      console.error('Video upload failed:', err);
+      showToast('error', 'Upload failed: ' + msg);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadProgresses({});
+    }
+  }
+
   const handleConversionConfirm = async () => {
     setShowConversionPrompt(false);
     setIsConverting(true);
     setConversionProgress({});
     
     try {
-      const convertedFiles: File[] = [];
-      
-      // Convert each file to WebP
-      for (let i = 0; i < filesToConvert.length; i++) {
-        const file = filesToConvert[i];
-        const fileKey = `${file.name}-${i}`;
+      // Convert all files in parallel for better performance
+      const conversionPromises = filesToConvert.map(async (file, i) => {
+        // Use filename to find the index in the original files array for consistent fileKey
+        const originalIndex = files.findIndex(f => f.name === file.name && f.size === file.size);
+        const fileKey = originalIndex >= 0 ? `${file.name}-${originalIndex}` : `${file.name}-${i}`;
         
-        setConversionProgress(prev => ({ ...prev, [fileKey]: 50 }));
+        // Initialize progress
+        setConversionProgress(prev => ({ ...prev, [fileKey]: 0 }));
         showToast('info', `Converting ${file.name} to WebP format...`);
+        
+        // Simulate progress updates during conversion
+        const progressInterval = setInterval(() => {
+          setConversionProgress(prev => {
+            const current = prev[fileKey] || 0;
+            if (current >= 90) {
+              clearInterval(progressInterval);
+              return prev;
+            }
+            // Increment progress gradually
+            return { ...prev, [fileKey]: Math.min(current + Math.random() * 20, 90) };
+          });
+        }, 200);
         
         try {
           const convertedFile = await convertToWebP(file, 0.8);
-          convertedFiles.push(convertedFile);
+          clearInterval(progressInterval);
           setConversionProgress(prev => ({ ...prev, [fileKey]: 100 }));
           showToast('success', `Successfully converted ${file.name} to WebP`);
+          return { success: true, file: convertedFile, originalFile: file };
         } catch (conversionError) {
+          clearInterval(progressInterval);
           console.error('Conversion error for', file.name, ':', conversionError);
           showToast('error', `Failed to convert ${file.name} to WebP. Skipping.`);
+          setConversionProgress(prev => ({ ...prev, [fileKey]: 0 }));
+          return { success: false, file: null, originalFile: file };
         }
-      }
+      });
+      
+      // Wait for all conversions to complete
+      const conversionResults = await Promise.all(conversionPromises);
+      const convertedFiles = conversionResults
+        .filter(result => result.success && result.file)
+        .map(result => result.file!);
       
       // Combine converted files with existing WebP files
       const allFiles = [...webpFiles, ...convertedFiles];
@@ -1117,74 +1381,108 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
     setUploadProgresses({});
     
     try {
-      const uploadResults = [];
+      const MAX_CONCURRENT = 3; // Upload 3 files concurrently
+      const uploadResults: Array<{ fileName: string; success: boolean; publicUrl: string; title: string }> = [];
       const totalFiles = filesToUpload.length;
       
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        const fileKey = `${file.name}-${i}`;
-
-      // Upload file to Supabase storage under slug folder
-        const finalFileName = `${Date.now()}-${i}.webp`;
-      const objectPath = `${STORAGE_PREFIX}/${selectedCategoryData.slug}/${finalFileName}`;
+      // Process files in batches for better performance
+      for (let i = 0; i < filesToUpload.length; i += MAX_CONCURRENT) {
+        const batch = filesToUpload.slice(i, i + MAX_CONCURRENT);
+        const timestamp = Date.now();
         
-        // Set initial progress for this file
-        setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
-      
-      const progressInterval = setInterval(() => {
-          setUploadProgresses(prev => {
-            const current = prev[fileKey] || 0;
-            if (current >= 90) {
+        // Upload batch in parallel
+        const batchPromises = batch.map(async (file, batchIndex) => {
+          const globalIndex = i + batchIndex;
+          const fileKey = `${file.name}-${globalIndex}`;
+          
+          // Upload file to Supabase storage under slug folder
+          const finalFileName = `${timestamp}-${globalIndex}.webp`;
+          const objectPath = `${STORAGE_PREFIX}/${selectedCategoryData.slug}/${finalFileName}`;
+          
+          // Set initial progress for this file
+          setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
+        
+          // Simulate progress updates
+          const progressInterval = setInterval(() => {
+            setUploadProgresses(prev => {
+              const current = prev[fileKey] || 0;
+              if (current >= 90) {
+                clearInterval(progressInterval);
+                return prev;
+              }
+              return { ...prev, [fileKey]: current + Math.random() * 15 };
+            });
+          }, 200);
+        
+          try {
+            const { data: fileData, error: uploadError } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .upload(objectPath, file, { upsert: true });
+
             clearInterval(progressInterval);
-            return prev;
+            setUploadProgresses(prev => ({ ...prev, [fileKey]: 100 }));
+
+            if (uploadError || !fileData || !fileData.path) {
+              const message = uploadError?.message || 'Upload failed: no file path returned.';
+              console.error('Supabase Storage upload error for', file.name, ':', uploadError);
+              throw new Error(`Failed to upload ${file.name}: ${message}`);
+            }
+
+            // Get public URL for the same object path
+            const { data: { publicUrl } } = supabase.storage
+              .from(STORAGE_BUCKET)
+              .getPublicUrl(objectPath);
+
+            if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
+              throw new Error(`Failed to retrieve a valid public URL for ${file.name}.`);
+            }
+
+            const derivedTitle = title.trim() || selectedCategoryData.name_am || (file.name.replace(/\.(jpg|jpeg|png|webp)$/i, '')) || `Picture ${timestamp}-${globalIndex}`;
+
+            return {
+              fileName: file.name,
+              success: true,
+              publicUrl,
+              title: derivedTitle
+            };
+          } catch (error) {
+            clearInterval(progressInterval);
+            setUploadProgresses(prev => ({ ...prev, [fileKey]: 0 }));
+            throw error;
           }
-            return { ...prev, [fileKey]: current + Math.random() * 15 };
         });
-      }, 200);
-      
-      const { data: fileData, error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(objectPath, file, { upsert: true });
-
-        console.log('Upload response for', file.name, ':', fileData, uploadError);
-
-      clearInterval(progressInterval);
-        setUploadProgresses(prev => ({ ...prev, [fileKey]: 100 }));
-
-      if (uploadError || !fileData || !fileData.path) {
-        const message = uploadError?.message || 'Upload failed: no file path returned.';
-          console.error('Supabase Storage upload error for', file.name, ':', uploadError);
-          throw new Error(`Failed to upload ${file.name}: ${message}`);
-      }
-
-      // Get public URL for the same object path
-      const { data: { publicUrl } } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(objectPath);
-
-        console.log('Public URL for', file.name, ':', publicUrl);
-
-      if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
-          throw new Error(`Failed to retrieve a valid public URL for ${file.name}.`);
-        }
-
-        const derivedTitle = title.trim() || selectedCategoryData.name_am || (file.name.replace(/\.[^.]+$/, '')) || `Picture ${Date.now()}-${i}`;
-
-      const { error } = await supabase.from('pictures').insert([{
-        title: derivedTitle,
-        image_url: publicUrl,
-          category_id: selectedCategoryData.id
-      }]);
-
-      if (error) {
-          console.error('Supabase DB insert error for', file.name, ':', error);
-          throw new Error(`Failed to save ${file.name} to database: ${error.message || 'Unknown DB error'}`);
-        }
-
-        uploadResults.push({ fileName: file.name, success: true });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.allSettled(batchPromises);
+        
+        // Process results
+        batchResults.forEach((result, batchIndex) => {
+          if (result.status === 'fulfilled') {
+            uploadResults.push(result.value);
+          } else {
+            console.error('Upload failed for file in batch:', result.reason);
+            showToast('error', `Failed to upload file: ${result.reason.message || 'Unknown error'}`);
+          }
+        });
         
         // Update overall progress
-        setUploadProgress(((i + 1) / totalFiles) * 100);
+        setUploadProgress(((i + batch.length) / totalFiles) * 100);
+      }
+      
+      // Batch insert all successful uploads at once
+      if (uploadResults.length > 0) {
+        const records = uploadResults.map(result => ({
+          title: result.title,
+          image_url: result.publicUrl,
+          category_id: selectedCategoryData.id
+        }));
+        
+        const { error: dbError } = await supabase.from('pictures').insert(records);
+        
+        if (dbError) {
+          console.error('Batch database insert error:', dbError);
+          throw new Error(`Failed to save records to database: ${dbError.message || 'Unknown DB error'}`);
+        }
       }
 
       // Clear form
@@ -1206,7 +1504,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
       }
       if (successCount === totalFiles) {
         showToast('success', `All ${successCount} pictures uploaded successfully!`);
-      } else {
+      } else if (successCount > 0) {
         showToast('success', `${successCount} out of ${totalFiles} pictures uploaded successfully.`);
       }
     } catch (error) {
@@ -1537,7 +1835,14 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
                   title={title}
                   setTitle={setTitle}
                   selectedCategory={selectedCategory}
-                  setSelectedCategory={setSelectedCategory}
+                  setSelectedCategory={(value) => {
+                    setSelectedCategory(value);
+                    // Force pictures mode if About Me or Hero category is selected
+                    const selectedCat = categories.find(c => c.id === value);
+                    if (selectedCat && (isAboutMeCategory(selectedCat) || isHeroCategory(selectedCat))) {
+                      setMediaType('pictures');
+                    }
+                  }}
                   categories={categories}
                   files={files}
                   setFiles={setFiles}
@@ -1554,6 +1859,22 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'dashboar
                   conversionProgress={conversionProgress}
                   profilePictureCategory={profilePictureCategory}
                   isValidUUID={isValidUUID}
+                  mediaType={mediaType}
+                  setMediaType={(type) => {
+                    // Prevent switching to videos if About Me or Hero is selected
+                    const selectedCat = categories.find(c => c.id === selectedCategory);
+                    if (selectedCat && (isAboutMeCategory(selectedCat) || isHeroCategory(selectedCat))) {
+                      if (type === 'videos') {
+                        showToast('error', 'Videos are not allowed for About Me and Hero sections. Only pictures are allowed.');
+                        return;
+                      }
+                    }
+                    setMediaType(type);
+                  }}
+                  isAboutMeOrHero={(() => {
+                    const selectedCat = categories.find(c => c.id === selectedCategory);
+                    return selectedCat ? (isAboutMeCategory(selectedCat) || isHeroCategory(selectedCat)) : false;
+                  })()}
                 />
               )}
 
