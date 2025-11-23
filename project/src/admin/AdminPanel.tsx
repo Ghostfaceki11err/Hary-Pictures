@@ -1,109 +1,26 @@
 import React, { useEffect, useMemo, useState, ChangeEvent, FormEvent, useRef, useCallback, memo } from 'react';
-import { Camera, Upload, Plus, X, Edit, Trash2, Zap, BarChart3, Activity, Shield, Eye } from 'lucide-react';
-import Lightbox from 'yet-another-react-lightbox';
-import 'yet-another-react-lightbox/styles.css';
-import Fullscreen from 'yet-another-react-lightbox/plugins/fullscreen';
-import Zoom from 'yet-another-react-lightbox/plugins/zoom';
-import Slideshow from 'yet-another-react-lightbox/plugins/slideshow';
+import { Upload, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import { Category, Picture, ToastType, ToastItem, AdminSection, SortMode, StorageUsage } from './types';
+import { convertToWebP } from './utils/convertToWebP';
+import { STORAGE_BUCKET, STORAGE_PREFIX } from './utils/constants';
+import { AdminHeader } from './components/AdminHeader';
+import { AdminSidebar } from './components/AdminSidebar';
+import { MediaUploadSection } from './components/MediaUploadSection';
+import { CategoryManagement } from './components/CategoryManagement';
+import { GalleryView } from './components/GalleryView';
+import { ProfilePictureManager } from './components/ProfilePictureManager';
+import { HeroImageManager } from './components/HeroImageManager';
+import { ToastContainer } from './components/ToastContainer';
+import { DeleteModals } from './components/DeleteModals';
 
-const STORAGE_BUCKET = 'pictures';
-const STORAGE_PREFIX = 'public';
-
-// WebP conversion utility
-const convertToWebP = (file: File, quality: number = 0.8): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    // Check if file is already WebP
-    if (file.type === 'image/webp') {
-      resolve(file);
-      return;
-    }
-
-    // Check if file is a supported image type (including JFIF files)
-    const isSupportedType = file.type.match(/^image\/(jpeg|jpg|png|webp)$/) || 
-                           file.name.toLowerCase().match(/\.(jfif|jpe)$/);
-    
-    if (!isSupportedType) {
-      reject(new Error('Unsupported file type. Please upload PNG, JPG, or JFIF images.'));
-      return;
-    }
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-
-    img.onload = () => {
-      // Set canvas dimensions
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      // Draw image on canvas
-      ctx?.drawImage(img, 0, 0);
-
-      // Convert to WebP
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            // Create new file with WebP extension
-            const webpFile = new File([blob], file.name.replace(/\.(jpg|jpeg|png)$/i, '.webp'), {
-              type: 'image/webp',
-              lastModified: Date.now()
-            });
-            resolve(webpFile);
-          } else {
-            reject(new Error('Failed to convert image to WebP'));
-          }
-        },
-        'image/webp',
-        quality
-      );
-    };
-
-    img.onerror = () => {
-      reject(new Error('Failed to load image for conversion'));
-    };
-
-    // Load the image
-    img.src = URL.createObjectURL(file);
-  });
-};
-
-// Memoized Image Component for better performance
-const OptimizedImage = memo(({ src, alt, className, ...props }: { src: string; alt: string; className?: string; [key: string]: any }) => (
-  <img 
-    src={src} 
-    alt={alt} 
-    className={className}
-    loading="lazy"
-    decoding="async"
-    style={{ willChange: 'transform' }}
-    {...props}
-  />
-));
-OptimizedImage.displayName = 'OptimizedImage';
-
-interface Category {
-  id: string;
-  name_am: string;
-  slug: string;
-}
-
-interface Picture {
-  id: string;
-  title: string;
-  image_url: string;
-  categories: Category;
-}
-
-type ToastType = 'success' | 'error' | 'info';
-interface ToastItem { id: number; type: ToastType; message: string }
-interface AdminPanelProps { initialSection?: 'overview' | 'media' | 'categories' | 'gallery' }
+interface AdminPanelProps { initialSection?: AdminSection }
 
 const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview' }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [pictures, setPictures] = useState<Picture[]>([]);
   const [selectedFilterCategoryId, setSelectedFilterCategoryId] = useState<string>('');
-  const [sortMode, setSortMode] = useState<'newest' | 'oldest' | 'title'>('newest');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [newCategoryAm, setNewCategoryAm] = useState('');
   const [newCategorySlug, setNewCategorySlug] = useState('');
   const [title, setTitle] = useState('');
@@ -139,12 +56,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   
   // Storage usage state
-  const [storageUsage, setStorageUsage] = useState<{
-    used: number; // in bytes
-    total: number; // in bytes (1GB = 1024^3 bytes)
-    loading: boolean;
-    error: string | null;
-  }>({
+  const [storageUsage, setStorageUsage] = useState<StorageUsage>({
     used: 0,
     total: 1024 * 1024 * 1024, // 1GB in bytes
     loading: true,
@@ -192,7 +104,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Admin navigation (sidebar + bottom nav)
-  const [activeSection, setActiveSection] = useState<'overview' | 'media' | 'categories' | 'gallery'>(initialSection);
+  const [activeSection, setActiveSection] = useState<AdminSection>(initialSection);
 
   const showToast = useCallback((type: ToastType, message: string) => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -223,7 +135,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
     setSelectedFilterCategoryId(categoryId);
   }, []);
 
-  const handleSortChange = useCallback((sort: 'newest' | 'oldest' | 'title') => {
+  const handleSortChange = useCallback((sort: SortMode) => {
     setSortMode(sort);
   }, []);
 
@@ -272,7 +184,6 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
 
   const headerRef = useRef<HTMLDivElement>(null);
   const uploadRef = useRef<HTMLDivElement>(null);
-  const gridRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch categories, pictures, and storage usage on load
@@ -380,9 +291,6 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const getStorageUsagePercentage = (): number => {
-    return (storageUsage.used / storageUsage.total) * 100;
-  };
 
   // Helper function to check if a category is the About Me category
   const isAboutMeCategory = (category: Category): boolean => {
@@ -872,13 +780,6 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
   }, [pictures, selectedFilterCategoryId, sortMode]);
 
   // Memoized lightbox slides
-  const lightboxSlides = useMemo(() => {
-    return filteredPictures.map(pic => ({ 
-      src: pic.image_url, 
-      title: pic.title, 
-      description: pic.categories?.name_am 
-    }));
-  }, [filteredPictures]);
 
   // URL sync (persist selection, search, sort)
   useEffect(() => {
@@ -1420,96 +1321,14 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
 
       {/* Header - show only on overview */}
       {activeSection === 'overview' && (
-      <section 
-        ref={headerRef}
-        className="relative py-20 text-center"
-      >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-
-          {/* User Profile Card */}
-          {isAuthenticated && userEmail && (
-            <div className="flex justify-center mb-8">
-              <div className="group relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:bg-white/10 transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/10">
-                {/* Background Glow Effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                
-                <div className="relative flex items-center gap-4">
-                  {/* Avatar */}
-                  <div className="relative">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg">
-                      <span className="text-white text-2xl font-bold">
-                        {userEmail.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-2 border-slate-900 flex items-center justify-center">
-                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    </div>
-                  </div>
-
-                  {/* User Info */}
-                  <div className="text-left flex-1">
-                    <div className="text-white text-lg font-semibold mb-1">{userEmail}</div>
-                    <div className="text-gray-400 text-sm mb-2">Admin User</div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-3">
-                    {/* Home Button */}
-                    <button
-                      onClick={() => window.location.href = '/'}
-                      className="px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 hover:border-blue-500/50 text-blue-200 hover:text-white rounded-xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                        <span>Home</span>
-                      </div>
-                    </button>
-
-                    {/* Logout Button */}
-                    <button
-                      onClick={handleLogout}
-                      className="px-4 py-2 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 hover:border-red-500/50 text-red-200 hover:text-white rounded-xl font-medium transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-red-500/25"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        <span>Logout</span>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <h1 className="text-5xl sm:text-6xl font-extrabold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent mb-6 tracking-tight">
-            Admin Hub
-          </h1>
-          <p className="text-xl sm:text-2xl text-gray-300 leading-relaxed max-w-3xl mx-auto mb-8">
-            Manage your visual content with style and precision
-          </p>
-
-          {/* Sidebar replaces tabs (mobile bottom nav added below) */}
-          
-          {/* Quick Stats */}
-          <div className="flex flex-wrap justify-center gap-6 mt-12">
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
-              <div className="text-2xl font-bold text-white">{categories.length}</div>
-              <div className="text-sm text-gray-400">Categories</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
-              <div className="text-2xl font-bold text-white">{pictures.length}</div>
-              <div className="text-sm text-gray-400">Pictures</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-4">
-              <div className="text-2xl font-bold text-white">{formatBytes(storageUsage.used)}</div>
-              <div className="text-sm text-gray-400">Storage Used</div>
-            </div>
-          </div>
-        </div>
+        <section ref={headerRef} className="relative py-20 text-center">
+          <AdminHeader
+            userEmail={userEmail}
+            onLogout={handleLogout}
+            categoriesCount={categories.length}
+            picturesCount={pictures.length}
+            storageUsed={formatBytes(storageUsage.used)}
+          />
       </section>
       )}
 
@@ -1521,506 +1340,48 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
           <div className="grid grid-cols-1 lg:grid-cols-[260px,1fr] gap-4 lg:gap-6">
             {/* Sidebar */}
             <aside className="space-y-6 sticky top-24 self-start">
-              {/* Nav */}
-              <nav className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
-                <div className="relative grid gap-2">
-                  {[
-                    { id: 'overview', label: 'Overview', icon: (
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 13h8V3H3v10zM13 21h8v-6h-8v6zM13 3v8h8V3h-8zM3 21h8v-6H3v6z" /></svg>
-                    ) },
-                    { id: 'media', label: 'Media', icon: (
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16v12H4z" /><path d="M2 20h20" /><path d="M8 10l2.5 3 3.5-5 4 6" /></svg>
-                    ) },
-                    { id: 'categories', label: 'Categories', icon: (
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-                    ) },
-                  ].map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveSection(item.id as any)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${
-                        activeSection === item.id
-                          ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow'
-                          : 'text-gray-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <span className="opacity-90">{item.icon}</span>
-                      <span className="font-medium">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-                {activeSection !== 'overview' && (
-                  <div className="relative mt-3 pt-3 border-t border-white/10">
-                    <button
-                      onClick={() => { window.location.href = '/admin'; }}
-                      className="w-full px-3 py-2 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-colors"
-                    >
-                      ← Admin Home
-                    </button>
-                  </div>
-                )}
-              </nav>
-              {/* Quick Actions - only on overview */}
-              {activeSection === 'overview' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <Zap className="w-5 h-5 text-blue-400" />
-                    Quick Actions
-                  </h3>
-                <div className="space-y-3">
-                    <button 
-                      onClick={() => setEditingCategoryId(null)} 
-                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <Plus className="w-4 h-4" />
-                      New Category
-                    </button>
-                    <button 
-                      onClick={() => uploadRef.current?.scrollIntoView({ behavior: 'smooth' })} 
-                      className="w-full px-4 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center justify-center gap-2 font-semibold"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upload Picture
-                    </button>
-                </div>
-              </div>
-                </div>
-              )}
-
-              {/* Enhanced Stats - Overview */}
-              {activeSection === 'overview' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5 text-purple-400" />
-                    Statistics
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                      <span className="text-sm text-gray-300">Categories</span>
-                      <span className="text-xl font-bold text-white">{categories.length}</span>
-              </div>
-                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                      <span className="text-sm text-gray-300">Pictures</span>
-                      <span className="text-xl font-bold text-white">{pictures.length}</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/10">
-                      <span className="text-sm text-gray-300">Storage</span>
-                      <span className="text-lg font-bold text-white">{formatBytes(storageUsage.used)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              )}
-              
-              {/* Tips - Overview */}
-              {activeSection === 'overview' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-amber-400" />
-                    Pro Tips
-                  </h3>
-                  <div className="space-y-3 text-sm text-gray-300">
-                    <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-                      <p className="font-medium text-white mb-1">Naming Convention</p>
-                      <p>Use Amharic for display names and English for file storage.</p>
-                    </div>
-                    <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-                      <p className="font-medium text-white mb-1">WebP Format</p>
-                      <p>All images must be in WebP format for optimal performance.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              )}
-              
-              {/* Enhanced Storage Usage Indicator - Overview */}
-              {activeSection === 'overview' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                    Storage Analytics
-                </h3>
-                
-                {storageUsage.loading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <div className="relative">
-                        <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500/30 border-t-blue-500"></div>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Activity className="w-4 h-4 text-blue-400 animate-pulse" />
-                        </div>
-                      </div>
-                      <span className="ml-3 text-sm text-gray-300">Analyzing storage...</span>
-                  </div>
-                ) : storageUsage.error ? (
-                    <div className="text-center py-8">
-                      <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <X className="w-6 h-6 text-red-400" />
-                      </div>
-                      <p className="text-red-400 text-sm mb-3">Storage analysis failed</p>
-                    <button 
-                      onClick={fetchStorageUsage}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors"
-                    >
-                        Retry Analysis
-                    </button>
-                  </div>
-                ) : (
-                    <div className="space-y-4">
-                      {/* Storage Overview */}
-                      <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div className="text-2xl font-bold text-white mb-1">
-                          {formatBytes(storageUsage.used)}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          of {formatBytes(storageUsage.total)} used
-                        </div>
-                    </div>
-                    
-                      {/* Circular Progress */}
-                      <div className="relative w-24 h-24 mx-auto">
-                        <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            stroke="currentColor"
-                            strokeWidth="8"
-                            fill="none"
-                            className="text-slate-700"
-                          />
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="40"
-                            stroke="currentColor"
-                            strokeWidth="8"
-                            fill="none"
-                            strokeDasharray={`${2 * Math.PI * 40}`}
-                            strokeDashoffset={`${2 * Math.PI * 40 * (1 - getStorageUsagePercentage() / 100)}`}
-                            className={`transition-all duration-1000 ease-out ${
-                            getStorageUsagePercentage() >= 90 
-                                ? 'text-red-500' 
-                              : getStorageUsagePercentage() >= 75 
-                                  ? 'text-yellow-500'
-                                  : 'text-emerald-500'
-                            }`}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-lg font-bold text-white">
-                            {getStorageUsagePercentage().toFixed(0)}%
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* Storage Status */}
-                    <div className="text-center">
-                        <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
-                        getStorageUsagePercentage() >= 90 
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                          : getStorageUsagePercentage() >= 75 
-                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        }`}>
-                          <div className={`w-2 h-2 rounded-full ${
-                            getStorageUsagePercentage() >= 90 
-                              ? 'bg-red-400' 
-                              : getStorageUsagePercentage() >= 75 
-                                ? 'bg-yellow-400'
-                                : 'bg-emerald-400'
-                          }`}></div>
-                        {getStorageUsagePercentage() >= 90 
-                            ? 'Storage Critical' 
-                          : getStorageUsagePercentage() >= 75 
-                              ? 'Storage Warning'
-                            : 'Storage Healthy'
-                        }
-                      </span>
-                    </div>
-                      
-                      {/* Remaining Space */}
-                      <div className="text-center text-sm text-gray-400">
-                        {formatBytes(storageUsage.total - storageUsage.used)} remaining
-                    </div>
-                  </div>
-                )}
-                </div>
-              </div>
-              )}
+              <AdminSidebar
+                activeSection={activeSection}
+                onSectionChange={setActiveSection}
+                onNewCategory={() => setEditingCategoryId(null)}
+                onUploadClick={() => uploadRef.current?.scrollIntoView({ behavior: 'smooth' })}
+                categoriesCount={categories.length}
+                picturesCount={pictures.length}
+                storageUsage={storageUsage}
+                onRetryStorage={fetchStorageUsage}
+              />
 
               {/* Profile section - Media */}
               {activeSection === 'media' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full animate-pulse"></div>
-                    Profile Management
-                </h3>
-                
-                {profilePictureLoading ? (
-                  <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-500"></div>
-                    <span className="ml-2 text-sm text-gray-300">Loading...</span>
-                  </div>
-                ) : showCreateProfileCategory ? (
-                  /* Create About Me Category */
-                  <div className="space-y-4">
-                    <div className="text-center py-4">
-                      <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-sm text-gray-300 mb-4">
-                        No "About Me" category found. Create one to manage About Me images.
-                      </p>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-sm text-gray-300 mb-1">Category Name:</label>
-                        <div className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm flex items-center justify-between">
-                          <span className="text-white">About Me</span>
-                          <span className="text-xs text-gray-400 bg-slate-700 px-2 py-1 rounded">Fixed</span>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-1">Category name cannot be changed</p>
-                      </div>
-                      
-                      <div className="bg-slate-800/50 p-3 rounded-lg">
-                        <p className="text-xs text-gray-400 mb-1">Slug (file name):</p>
-                        <p className="text-sm text-purple-400 font-mono">about-me</p>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <button
-                          onClick={createAboutMeCategory}
-                          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                        >
-                          Create Category
-                        </button>
-                        <button
-                          onClick={() => setShowCreateProfileCategory(false)}
-                          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : profilePictureCategory && aboutMePictures.length === 0 ? (
-                  /* Category exists but no images */
-                  <div className="space-y-4">
-                    <div className="text-center py-4">
-                      <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-sm text-gray-300 mb-2">
-                        "About Me" category exists but has no images.
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Upload a WebP image to this category to use as About Me image.
-                      </p>
-                    </div>
-                    
-                    <button
-                      onClick={() => setShowProfileUpload(true)}
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upload About Me Image
-                    </button>
-                  </div>
-                ) : (
-                  /* Display About Me images from category */
-                  <div className="space-y-4">
-                    {/* About Me Images Grid */}
-                    <div className="grid grid-cols-1 gap-3">
-                      {aboutMePictures.map((picture) => (
-                        <div key={picture.id} className="relative group">
-                          <div
-                            className="w-48 h-48 mx-auto rounded-lg overflow-hidden border-2 border-white/20 bg-slate-800 cursor-pointer"
-                            onClick={() => openCustomLightbox(
-                              aboutMePictures.map(p => ({ src: p.image_url, title: p.title })),
-                              aboutMePictures.findIndex(p => p.id === picture.id)
-                            )}
-                          >
-                            <img 
-                              src={picture.image_url} 
-                              alt={picture.title} 
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => handleAboutMeDeleteClick(picture.id)}
-                              className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
-                              title="Delete this image"
-                            >
-                              <X className="w-3 h-3 text-white" />
-                            </button>
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1 text-center">{picture.title}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Upload More Button - Disabled when images exist */}
-                    <button
-                      onClick={() => {
-                        if (aboutMePictures.length > 0) {
-                          showToast('info', 'Please delete existing About Me images before uploading new ones. Only one image is allowed in the About Me section.');
-                        } else {
-                          setShowProfileUpload(true);
-                        }
-                      }}
-                      disabled={aboutMePictures.length > 0}
-                      className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                        aboutMePictures.length > 0 
-                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                          : 'bg-purple-600 hover:bg-purple-700 text-white'
-                      }`}
-                    >
-                      <Upload className="w-4 h-4" />
-                      {aboutMePictures.length > 0 ? 'Delete Existing Image First' : 'Upload Image'}
-                    </button>
-                    
-                    {aboutMePictures.length > 0 && (
-                      <p className="text-xs text-gray-400 text-center mt-2">
-                        Only one image is allowed in the About Me section. Delete the current image to upload a new one.
-                      </p>
-                    )}
-                  </div>
-                )}
-                </div>
-              </div>
+                <ProfilePictureManager
+                  profilePictureLoading={profilePictureLoading}
+                  showCreateProfileCategory={showCreateProfileCategory}
+                  profilePictureCategory={profilePictureCategory}
+                  aboutMePictures={aboutMePictures}
+                  onCreateCategory={createAboutMeCategory}
+                  onCancelCreate={() => setShowCreateProfileCategory(false)}
+                  onShowUpload={() => setShowProfileUpload(true)}
+                  onImageClick={openCustomLightbox}
+                  onDeleteClick={handleAboutMeDeleteClick}
+                  showToast={showToast}
+                />
               )}
 
               {/* Hero section - Media */}
               {activeSection === 'media' && (
-              <div className="relative overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-teal-500/5"></div>
-                <div className="relative">
-                  <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                    <div className="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                    Hero Management
-                  </h3>
-
-                  {heroPictureLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
-                      <span className="ml-2 text-sm text-gray-300">Loading...</span>
-                    </div>
-                  ) : showCreateHeroCategory ? (
-                    <div className="space-y-4">
-                      <div className="text-center py-4">
-                        <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                        <p className="text-sm text-gray-300 mb-4">
-                          No "Hero" category found. Create one to manage the hero image.
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-sm text-gray-300 mb-1">Category Name:</label>
-                          <div className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm flex items-center justify-between">
-                            <span className="text-white">Hero</span>
-                            <span className="text-xs text-gray-400 bg-slate-700 px-2 py-1 rounded">Fixed</span>
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 p-3 rounded-lg">
-                          <p className="text-xs text-gray-400 mb-1">Slug (file name):</p>
-                          <p className="text-sm text-emerald-400 font-mono">hero</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={createHeroCategory}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            Create Category
-                          </button>
-                          <button
-                            onClick={() => setShowCreateHeroCategory(false)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-gray-300 rounded-lg text-sm transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : heroCategory && heroPictures.length === 0 ? (
-                    <div className="space-y-4">
-                      <div className="text-center py-4">
-                        <Camera className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                        <p className="text-sm text-gray-300 mb-2">
-                          "Hero" category exists but has no images.
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          Upload a WebP image to this category to use as the Hero image.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowHeroUpload(true)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Upload className="w-4 h-4" />
-                        Upload Hero Image
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 gap-3">
-                        {heroPictures.map((picture) => (
-                          <div key={picture.id} className="relative group">
-                            <div
-                              className="w-48 h-48 mx-auto rounded-lg overflow-hidden border-2 border-white/20 bg-slate-800 cursor-pointer"
-                              onClick={() => openCustomLightbox(
-                                heroPictures.map(p => ({ src: p.image_url, title: p.title })),
-                                heroPictures.findIndex(p => p.id === picture.id)
-                              )}
-                            >
-                              <img src={picture.image_url} alt={picture.title} className="w-full h-full object-cover" />
-                            </div>
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleHeroDeleteClick(picture.id)}
-                                className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors"
-                                title="Delete this image"
-                              >
-                                <X className="w-3 h-3 text-white" />
-                              </button>
-                            </div>
-                            <p className="text-xs text-gray-400 mt-1 text-center">{picture.title}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (heroPictures.length > 0) {
-                            showToast('info', 'Please delete the existing Hero image before uploading a new one. Only one image is allowed in the Hero section.');
-                          } else {
-                            setShowHeroUpload(true);
-                          }
-                        }}
-                        disabled={heroPictures.length > 0}
-                        className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                          heroPictures.length > 0 
-                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                        }`}
-                      >
-                        <Upload className="w-4 h-4" />
-                        {heroPictures.length > 0 ? 'Delete Existing Image First' : 'Upload Image'}
-                      </button>
-                      {heroPictures.length > 0 && (
-                        <p className="text-xs text-gray-400 text-center mt-2">
-                          Only one image is allowed in the Hero section. Delete the current image to upload a new one.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                <>
+                  <HeroImageManager
+                    heroPictureLoading={heroPictureLoading}
+                    showCreateHeroCategory={showCreateHeroCategory}
+                    heroCategory={heroCategory}
+                    heroPictures={heroPictures}
+                    onCreateCategory={createHeroCategory}
+                    onCancelCreate={() => setShowCreateHeroCategory(false)}
+                    onShowUpload={() => setShowHeroUpload(true)}
+                    onImageClick={openCustomLightbox}
+                    onDeleteClick={handleHeroDeleteClick}
+                    showToast={showToast}
+                  />
 
                   {/* Upload Drawer */}
                   {showHeroUpload && heroCategory && (
@@ -2059,8 +1420,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
                       </form>
                     </div>
                   )}
-                </div>
-              </div>
+                </>
               )}
             </aside>
 
@@ -2068,187 +1428,35 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
             <div className="space-y-8">
               {/* Enhanced Category Management - Categories */}
               {activeSection === 'categories' && (
-              <div className="relative overflow-hidden rounded-3xl">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-3xl blur opacity-20" />
-                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-                  <div className="flex items-center justify-between mb-8">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-xl border border-blue-500/30">
-                        <Plus className="w-6 h-6 text-blue-400" />
-                  </div>
-                      <h2 className="text-2xl font-bold text-white">
-                        {editingCategoryId ? 'Edit Category' : 'Create New Category'}
-                      </h2>
-                    </div>
-                      {editingCategoryId && (
-                      <button 
-                        onClick={() => { setEditingCategoryId(null); setNewCategoryAm(''); setNewCategorySlug(''); }} 
-                        className="p-2 text-gray-400 hover:text-white transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                      )}
-                    </div>
-                  
-                  <form onSubmit={handleAddCategory} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                          <span>Category Name</span>
-                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">Amharic</span>
-                        </label>
-                        <input 
-                          type="text" 
-                          value={newCategoryAm} 
-                          onChange={(e) => setNewCategoryAm(e.target.value)} 
-                          placeholder="Enter category name in Amharic" 
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
-                          required 
-                        />
-                        <p className="text-xs text-gray-400">This will be displayed to users</p>
-                    </div>
-                      
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                          <span>File Name</span>
-                          <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full">English</span>
-                        </label>
-                        <input 
-                          type="text" 
-                          value={newCategorySlug} 
-                          onChange={(e) => setNewCategorySlug(e.target.value)} 
-                          placeholder="e.g. wedding, portrait, nature" 
-                          className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
-                          required 
-                        />
-                        <p className="text-xs text-gray-400">Used for file storage organization</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-4">
-                      <button 
-                        type="submit" 
-                        disabled={isAddingCategory} 
-                        className="flex-1 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:from-blue-900 disabled:to-cyan-900 text-white px-6 py-4 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-blue-800/30 hover:scale-105 flex items-center justify-center gap-2"
-                      >
-                        {isAddingCategory ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
-                            {editingCategoryId ? 'Saving...' : 'Adding...'}
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4" />
-                            {editingCategoryId ? 'Save Changes' : 'Add Category'}
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Enhanced Category List */}
-                  <div className="mt-8 space-y-4">
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5 text-blue-400" />
-                      Categories ({categories.length})
-                    </h3>
-                    
-                    <div className="grid gap-4">
-                    {categories.map((cat) => (
-                        <div key={cat.id} className="group relative overflow-hidden bg-white/5 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-[1.02]">
-                          <div className="p-6">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div className="p-2 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg border border-blue-500/30">
-                                    <Camera className="w-4 h-4 text-blue-400" />
-                                  </div>
-                                  <div>
-                                    <h4 className="text-lg font-semibold text-white">{cat.name_am}</h4>
-                                    <p className="text-sm text-gray-400 font-mono">{cat.slug}</p>
-                                  </div>
-                                  {isAboutMeCategory(cat) && (
-                                    <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full border border-purple-500/30">
-                                      Profile
-                                    </span>
-                                  )}
-                                  {isHeroCategory(cat) && (
-                                    <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
-                                      Hero
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-4 text-sm text-gray-400">
-                                  <span>{categoryIdToCount[cat.id] || 0} pictures</span>
-                                  <span>•</span>
-                                  <span>Created recently</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-2">
-                          {isAboutMeCategory(cat) || isHeroCategory(cat) ? (
-                            <button 
-                              disabled 
-                                    className="px-4 py-2 rounded-xl bg-gray-600/50 cursor-not-allowed text-gray-400 flex items-center gap-2 text-sm border border-gray-600/50"
-                              title="About Me category cannot be edited"
-                            >
-                                    <Shield className="w-4 h-4" />
-                                    Protected
-                            </button>
-                          ) : (
-                                  <button 
-                                    onClick={() => { setEditingCategoryId(cat.id); setNewCategoryAm(cat.name_am); setNewCategorySlug(cat.slug); }} 
-                                    className="px-4 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 hover:text-blue-300 flex items-center gap-2 text-sm border border-blue-500/30 hover:border-blue-500/50 transition-all duration-300"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                    Edit
-                                  </button>
-                                )}
-                                
-                          <button 
-                            onClick={() => { 
-                              if (isAboutMeCategory(cat)) {
-                                setIsProfileDeleteConfirmOpen(true);
-                                setDeleteTargetCategoryId(cat.id);
-                                setDeleteTargetInfo({ name_am: cat.name_am, slug: cat.slug });
-                                setProfileDeleteStep(1);
-                              } else {
-                                setIsDeleteModalOpen(true); 
-                                setDeleteTargetCategoryId(cat.id); 
-                                setDeleteTargetInfo({ name_am: cat.name_am, slug: cat.slug }); 
-                                setDeleteAlsoImages(false); 
-                                setDeleteImageCount(null); 
-                                loadCategoryImageCount(cat.id).then((count) => setDeleteImageCount(count));
-                              }
-                            }} 
-                            disabled={deletingCategoryId === cat.id} 
-                                  className={`px-4 py-2 rounded-xl text-white flex items-center gap-2 text-sm border transition-all duration-300 ${
-                                    deletingCategoryId === cat.id 
-                                      ? 'bg-red-800/50 cursor-not-allowed border-red-600/50' 
-                                      : 'bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/50'
-                                  }`}
-                          >
-                            {deletingCategoryId === cat.id ? (
-                                    <>
-                                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
-                                      Deleting...
-                                    </>
-                            ) : (
-                              <>
-                                      <Trash2 className="w-4 h-4" />
-                                      Delete
-                              </>
-                            )}
-                          </button>
-                              </div>
-                            </div>
-                        </div>
-                      </div>
-                    ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                <CategoryManagement
+                  categories={categories}
+                  newCategoryAm={newCategoryAm}
+                  setNewCategoryAm={setNewCategoryAm}
+                  newCategorySlug={newCategorySlug}
+                  setNewCategorySlug={setNewCategorySlug}
+                  editingCategoryId={editingCategoryId}
+                  setEditingCategoryId={setEditingCategoryId}
+                  isAddingCategory={isAddingCategory}
+                  handleAddCategory={handleAddCategory}
+                  deletingCategoryId={deletingCategoryId}
+                  categoryIdToCount={categoryIdToCount}
+                  onDeleteCategory={async (category) => {
+                    setIsDeleteModalOpen(true);
+                    setDeleteTargetCategoryId(category.id);
+                    setDeleteTargetInfo({ name_am: category.name_am, slug: category.slug });
+                    setDeleteAlsoImages(false);
+                    setDeleteImageCount(null);
+                    const count = await loadCategoryImageCount(category.id);
+                    setDeleteImageCount(count);
+                  }}
+                  onDeleteProfileCategory={(category) => {
+                    setIsProfileDeleteConfirmOpen(true);
+                    setDeleteTargetCategoryId(category.id);
+                    setDeleteTargetInfo({ name_am: category.name_am, slug: category.slug });
+                    setProfileDeleteStep(1);
+                  }}
+                  loadCategoryImageCount={loadCategoryImageCount}
+                />
               )}
 
               {/* Mobile bottom nav */}
@@ -2274,633 +1482,176 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
 
               {/* Enhanced Upload Section - Media only */}
               {activeSection === 'media' && (
-              <div className="relative overflow-hidden rounded-3xl">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-3xl blur opacity-20" />
-                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="p-3 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl border border-emerald-500/30">
-                      <Upload className="w-6 h-6 text-emerald-400" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-white">Upload Pictures</h2>
-                  </div>
-                  <form onSubmit={handleUpload} className="space-y-6">
-                    {/* Title Input */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-300">Picture Title (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={title} 
-                        onChange={(e) => setTitle(e.target.value)} 
-                        placeholder="Enter a descriptive title for your pictures" 
-                        className="w-full px-4 py-3 rounded-xl bg-white/5 text-white placeholder-gray-400 border border-white/10 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-white/10" 
-                      />
-                      <p className="text-xs text-gray-400">Leave empty to use category name as title</p>
-                    </div>
-                    
-                    {/* Category Selection */}
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-300">Select Category</label>
-                      <select 
-                        value={selectedCategory} 
-                        onChange={(e) => { const value = e.target.value; if (value === '' || isValidUUID(value)) { setSelectedCategory(value); } }} 
-                        className="w-full px-4 py-3 rounded-xl bg-slate-800 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition-all duration-300 hover:bg-slate-700" 
-                        required
-                      >
-                        <option value="" className="bg-slate-800 text-white">Choose a category for your pictures</option>
-                        {categories.filter(cat => !isAboutMeCategory(cat) && !isHeroCategory(cat)).map(cat => (
-                          <option key={cat.id} value={cat.id} className="bg-slate-800 text-white">
-                            {cat.name_am} ({cat.slug})
-                          </option>
-                        ))}
-                    </select>
-                      <p className="text-xs text-gray-400">Pictures will be organized under the selected category</p>
-                    </div>
-                    <div className="relative">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-gray-300 text-sm">Upload via URL (WebP only)</span>
-                        <label htmlFor="useUrlUpload" className="inline-flex items-center cursor-pointer select-none">
-                          <input
-                            id="useUrlUpload"
-                            type="checkbox"
-                            checked={useUrlUpload}
-                            onChange={(e) => setUseUrlUpload(e.target.checked)}
-                            className="sr-only peer"
-                          />
-                          <div className="w-11 h-6 bg-slate-700/80 peer-focus:outline-none rounded-full peer peer-checked:bg-emerald-600 transition-colors relative">
-                            <span className="absolute top-0.5 left-0.5 h-5 w-5 bg-white rounded-full shadow transform transition-transform duration-200 peer-checked:translate-x-5" />
-                          </div>
-                        </label>
-                      </div>
-                      {useUrlUpload ? (
-                        <>
-                          <input type="url" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://example.com/image.webp" className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white placeholder-gray-400 border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition" required />
-                          <p className="text-xs text-gray-400 mt-1">Must be a direct .webp image URL</p>
-                        </>
-                      ) : (
-                        <>
-                          <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} accept=".webp,.jpg,.jpeg,.png,.jfif,.jpe,image/webp,image/jpeg,image/png" className="w-full px-4 py-3 rounded-xl bg-slate-800/70 text-white border border-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/30 focus:outline-none transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700" required />
-                          <p className="text-xs text-gray-400 mt-1">
-                            {selectedCategory === profilePictureCategory?.id 
-                              ? "PNG, JPG, JFIF, and WebP images are supported. Images will be automatically converted to WebP format. Only one image is allowed."
-                              : "PNG, JPG, JFIF, and WebP images are supported. Images will be automatically converted to WebP format. You can select multiple files."
-                            }
-                          </p>
-                          
-                          {/* Display selected files */}
-                          {files.length > 0 && (
-                            <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                              <p className="text-sm text-gray-300 mb-2">Selected files ({files.length}):</p>
-                              <div className="space-y-2 max-h-32 overflow-y-auto">
-                                {files.map((file, index) => (
-                                  <div key={index} className="flex items-center justify-between bg-slate-700/50 rounded px-3 py-2">
-                                    <div className="flex items-center space-x-2">
-                                      <Camera size={16} className="text-emerald-400" />
-                                      <span className="text-sm text-gray-200 truncate">{file.name}</span>
-                                      <span className="text-xs text-gray-400">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                                    </div>
-                                    <button
-                                      onClick={() => {
-                                        const newFiles = files.filter((_, i) => i !== index);
-                                        setFiles(newFiles);
-                                        if (newFiles.length === 0 && fileInputRef.current) {
-                                          fileInputRef.current.value = '';
-                                        }
-                                      }}
-                                      className="text-red-400 hover:text-red-300 transition-colors"
-                                    >
-                                      <X size={16} />
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {isUploading && !useUrlUpload && (
-                      <div className="w-full space-y-3">
-                        {/* Overall progress */}
-                        <div>
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm text-gray-300">Overall Progress</span>
-                            <span className="text-sm text-gray-300">{Math.round(uploadProgress)}%</span>
-                          </div>
-                        <div className="w-full bg-slate-800 rounded-full h-2 border border-slate-700">
-                          <div className="bg-gradient-to-r from-green-500 to-emerald-400 h-2 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
-                        </div>
-                        </div>
-                        
-                        {/* Individual file progress */}
-                        {files.length > 1 && (
-                          <div className="space-y-2">
-                            <p className="text-xs text-gray-400">Individual files:</p>
-                            {files.map((file, index) => {
-                              const fileKey = `${file.name}-${index}`;
-                              const uploadProgress = uploadProgresses[fileKey] || 0;
-                              const conversionProgressValue = conversionProgress[fileKey] || 0;
-                              const isConverting = conversionProgressValue > 0 && conversionProgressValue < 100;
-                              const isUploading = uploadProgress > 0;
-                              
-                              return (
-                                <div key={fileKey} className="space-y-1">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-xs text-gray-300 truncate max-w-[200px]">{file.name}</span>
-                                    <div className="flex items-center gap-2">
-                                      {isConverting && (
-                                        <span className="text-xs text-amber-400">Converting...</span>
-                                      )}
-                                      {isUploading && !isConverting && (
-                                        <span className="text-xs text-blue-400">Uploading...</span>
-                                      )}
-                                      <span className="text-xs text-gray-400">
-                                        {isConverting ? Math.round(conversionProgressValue) : Math.round(uploadProgress)}%
-                                      </span>
-                                  </div>
-                                  </div>
-                                  
-                                  {/* Conversion Progress */}
-                                  {isConverting && (
-                                  <div className="w-full bg-slate-800/50 rounded-full h-1 border border-slate-700/50">
-                                      <div className="bg-gradient-to-r from-amber-500 to-orange-400 h-1 rounded-full transition-all duration-300 ease-out" style={{ width: `${conversionProgressValue}%` }}></div>
-                                  </div>
-                                  )}
-                                  
-                                  {/* Upload Progress */}
-                                  {isUploading && (
-                                    <div className="w-full bg-slate-800/50 rounded-full h-1 border border-slate-700/50">
-                                      <div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                      </div>
-                    )}
-                      </div>
-                    )}
-                    <button type="submit" disabled={isUploading || isConverting || !selectedCategory || (!useUrlUpload && files.length === 0) || (useUrlUpload && !imageUrl)} className="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:from-emerald-900 disabled:to-teal-900 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 shadow-lg hover:shadow-emerald-800/30">
-                      {isConverting ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Converting to WebP...
-                        </>
-                      ) : isUploading && !useUrlUpload ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          {useUrlUpload ? 'Add from URL' : files.length > 1 ? `Upload ${files.length} Pictures` : 'Upload Picture'}
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </div>
-              </div>
+                <MediaUploadSection
+                  title={title}
+                  setTitle={setTitle}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  categories={categories}
+                  files={files}
+                  setFiles={setFiles}
+                  handleFileChange={handleFileChange}
+                  useUrlUpload={useUrlUpload}
+                  setUseUrlUpload={setUseUrlUpload}
+                  imageUrl={imageUrl}
+                  setImageUrl={setImageUrl}
+                  handleUpload={handleUpload}
+                  isUploading={isUploading}
+                  isConverting={isConverting}
+                  uploadProgress={uploadProgress}
+                  uploadProgresses={uploadProgresses}
+                  conversionProgress={conversionProgress}
+                  profilePictureCategory={profilePictureCategory}
+                  isValidUUID={isValidUUID}
+                />
               )}
 
               {/* Enhanced Gallery - Gallery only */}
               {activeSection === 'gallery' && (
-              <div ref={gridRef} className="relative overflow-hidden rounded-3xl">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 rounded-3xl blur opacity-10" />
-                <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-br from-fuchsia-500/20 to-purple-500/20 rounded-xl border border-fuchsia-500/30">
-                        <Camera className="w-6 h-6 text-fuchsia-400" />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-white">Visual Gallery</h2>
-                        <p className="text-sm text-gray-400">{pictures.length} pictures across {categories.length} categories</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <select
-                        value={sortMode}
-                        onChange={(e) => handleSortChange(e.target.value as any)}
-                        className="px-4 py-3 rounded-xl bg-slate-800 text-white border border-slate-700 focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/30 focus:outline-none transition-all duration-300 hover:bg-slate-700"
-                      >
-                        <option value="newest" className="bg-slate-800 text-white">🕒 Newest First</option>
-                        <option value="oldest" className="bg-slate-800 text-white">🕐 Oldest First</option>
-                        <option value="title" className="bg-slate-800 text-white">🔤 Alphabetical</option>
-                      </select>
-                    </div>
-                  </div>
-                  {/* Enhanced Category Filters */}
-                  <div className="mb-8">
-                    <h3 className="text-sm font-medium text-gray-300 mb-4 text-center">Filter by Category</h3>
-                    <div className="flex flex-wrap gap-2 sm:gap-3 justify-center px-2 sm:px-0">
-                    <button
-                        onClick={() => handleCategoryFilter('')}
-                        className={`group relative overflow-hidden px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-300 border-2 flex items-center gap-2 sm:gap-3 touch-manipulation ${
-                        selectedFilterCategoryId === ''
-                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white border-blue-500 shadow-lg scale-105'
-                            : 'bg-white/5 text-gray-200 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95 sm:hover:scale-105'
-                        }`}
-                      >
-                        <div className="p-2 bg-white/20 rounded-lg">
-                          <Camera className="h-4 w-4" />
-                        </div>
-                        <span>All Pictures</span>
-                        <span className="px-2 py-1 bg-white/20 rounded-full text-xs">
-                          {pictures.filter(pic => !pic.categories || !isAboutMeCategory(pic.categories)).length}
-                        </span>
-                    </button>
-                      
-                    {categories.filter(cat => !isAboutMeCategory(cat)).map((cat) => {
-                      const preview = categoryIdToPreview[cat.id] || '';
-                      const count = categoryIdToCount[cat.id] || 0;
-                      return (
-                        <button
-                          key={cat.id}
-                            onClick={() => handleCategoryFilter(cat.id)}
-                            className={`group relative overflow-hidden px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-300 border-2 flex items-center gap-2 sm:gap-3 touch-manipulation ${
-                            selectedFilterCategoryId === cat.id
-                                ? 'bg-gradient-to-r from-fuchsia-600 to-purple-500 text-white border-fuchsia-500 shadow-lg scale-105'
-                                : 'bg-white/5 text-gray-200 border-white/10 hover:bg-white/10 hover:border-white/20 active:scale-95 sm:hover:scale-105'
-                          }`}
-                          title={cat.name_am}
-                        >
-                            <div className="relative h-8 w-8 rounded-lg overflow-hidden bg-gradient-to-br from-fuchsia-600/40 to-purple-500/40 border border-white/10">
-                            {preview ? (
-                              <OptimizedImage src={preview} alt={cat.name_am} className="h-full w-full object-cover" />
-                            ) : (
-                                <div className="h-full w-full flex items-center justify-center">
-                                  <Camera className="h-4 w-4 text-fuchsia-300" />
-                                </div>
-                            )}
-                            </div>
-                            <span className="truncate max-w-[8rem]">{cat.name_am}</span>
-                            <span className="px-2 py-1 bg-white/20 rounded-full text-xs">
-                              {count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                        </div>
-                  {/* Enhanced Gallery Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 lg:gap-6">
-                    {filteredPictures.map((pic, index) => (
-                      <div 
-                        key={pic.id} 
-                        className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur hover:border-white/20 transition-all duration-300 shadow-lg hover:shadow-xl sm:hover:scale-105" 
-                        onClick={() => handleImageClick(index)}
-                      >
-                          {/* Image Container */}
-                          <div className="relative aspect-square overflow-hidden">
-                            <OptimizedImage 
-                              src={pic.image_url} 
-                              alt={pic.title} 
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 sm:group-hover:scale-110" 
-                            />
-                            
-                            {/* Gradient Overlay */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                            
-                            {/* Category Badge */}
-                            <div className="absolute top-3 left-3">
-                              <span className="px-3 py-1 bg-gradient-to-r from-fuchsia-600/90 to-purple-500/90 text-white rounded-full text-xs font-semibold backdrop-blur-sm">
-                                {pic.categories?.name_am}
-                              </span>
-                        </div>
-                            
-                            {/* Delete Button */}
-                            <button 
-                              onClick={(e) => { 
-                                e.preventDefault();
-                                e.stopPropagation(); 
-                                handleDeleteClick(pic.id, pic.image_url);
-                              }} 
-                              onMouseDown={(e) => e.stopPropagation()}
-                              disabled={deletingPictureId === pic.id} 
-                              className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-300 shadow-lg z-10 ${
-                                deletingPictureId === pic.id 
-                                  ? 'bg-red-800/80 cursor-not-allowed' 
-                                  : 'bg-red-600/80 hover:bg-red-700/80 hover:scale-110'
-                              }`}
-                            >
-                              {deletingPictureId === pic.id ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
-                              ) : (
-                                <Trash2 className="w-4 h-4 text-white" />
-                              )}
-                            </button>
-                            
-                            {/* Hover Overlay */}
-                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
-                              <div className="p-3 bg-white/20 rounded-full backdrop-blur-sm">
-                                <Eye className="w-6 h-6 text-white" />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="p-4">
-                            <h3 className="text-white font-semibold text-lg mb-2 line-clamp-1 group-hover:text-fuchsia-300 transition-colors">
-                              {pic.title}
-                            </h3>
-                            <div className="flex items-center justify-between text-sm text-gray-400">
-                              <span className="flex items-center gap-1">
-                                <Camera className="w-3 h-3" />
-                                {pic.categories?.name_am}
-                              </span>
-                              <span className="text-xs bg-white/10 px-2 py-1 rounded-full">
-                                WebP
-                              </span>
-                            </div>
-                          </div>
-                      </div>
-                    ))}
-                  </div>
-                  {pictures.length === 0 && (
-                    <div className="text-center py-12">
-                      <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-400 text-lg">No pictures uploaded yet</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                <GalleryView
+                  pictures={pictures}
+                  categories={categories}
+                  filteredPictures={filteredPictures}
+                  selectedFilterCategoryId={selectedFilterCategoryId}
+                  sortMode={sortMode}
+                  onCategoryFilter={handleCategoryFilter}
+                  onSortChange={handleSortChange}
+                  categoryIdToCount={categoryIdToCount}
+                  categoryIdToPreview={categoryIdToPreview}
+                  lightboxOpen={lightboxOpen}
+                  lightboxIndex={lightboxIndex}
+                  customLightboxSlides={customLightboxSlides}
+                  onImageClick={handleImageClick}
+                  onCloseLightbox={() => { setLightboxOpen(false); setCustomLightboxSlides(null); }}
+                  onDeleteClick={handleDeleteClick}
+                  deletingPictureId={deletingPictureId}
+                />
               )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Lightbox Modal */}
-      {lightboxOpen && (
-        <Lightbox
-          open={lightboxOpen}
-          close={() => { setLightboxOpen(false); setCustomLightboxSlides(null); }}
-          index={lightboxIndex}
-          slides={customLightboxSlides || lightboxSlides}
-          on={{ view: ({ index }) => setLightboxIndex(index) }}
-          plugins={[Fullscreen, Zoom, Slideshow]}
-          slideshow={{ delay: 8000 }}
-          render={{
-            slideHeader: () => (
-              <div className="absolute top-4 left-4 z-50">
-                <div className="text-white text-sm sm:text-base font-semibold bg-black/60 rounded px-3 py-1">
-                  {lightboxIndex + 1} / {filteredPictures.length}
-                </div>
-              </div>
-            )
-          }}
-        />
-      )}
+      <DeleteModals
+        isDeletePicModalOpen={isDeletePicModalOpen}
+        deleteTargetPictureId={deleteTargetPictureId}
+        deleteTargetPictureUrl={deleteTargetPictureUrl}
+        deletePicLoading={deletePicLoading}
+        onCloseDeletePicModal={() => { setIsDeletePicModalOpen(false); setDeleteTargetPictureId(null); setDeleteTargetPictureUrl(null); }}
+        onConfirmDeletePicture={async () => {
+          if (!deleteTargetPictureId || !deleteTargetPictureUrl) return;
+          setDeletePicLoading(true);
+          try {
+            await handleDeletePicture(deleteTargetPictureId, deleteTargetPictureUrl);
+            setIsDeletePicModalOpen(false);
+            setDeleteTargetPictureId(null);
+            setDeleteTargetPictureUrl(null);
+          } finally {
+            setDeletePicLoading(false);
+          }
+        }}
+        isDeleteModalOpen={isDeleteModalOpen}
+        deleteTargetCategoryId={deleteTargetCategoryId}
+        deleteTargetInfo={deleteTargetInfo}
+        deleteImageCount={deleteImageCount}
+        deleteAlsoImages={deleteAlsoImages}
+        setDeleteAlsoImages={setDeleteAlsoImages}
+        deleteLoading={deleteLoading}
+        categories={categories}
+        onCloseDeleteCategoryModal={() => { setIsDeleteModalOpen(false); setDeleteTargetCategoryId(null); setDeleteTargetInfo(null); }}
+        onConfirmDeleteCategory={async () => {
+          if (deleteImageCount && deleteImageCount > 0 && !deleteAlsoImages) {
+            showToast('info', 'This category has images. Check the box to also delete images, or cancel.');
+            return;
+          }
+          setDeleteLoading(true);
+          try {
+            const catId = deleteTargetCategoryId;
+            const cat = categories.find(c => c.id === catId);
+            if (!cat) throw new Error('Category not found');
 
-      {/* Confirm Delete Picture Modal */}
-      {isDeletePicModalOpen && deleteTargetPictureId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-md bg-slate-900/50 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Picture</h3>
-            <p className="text-gray-300 mb-4">Are you sure you want to delete this picture? This action cannot be undone.</p>
-            {deleteTargetPictureUrl && (
-              <div className="mb-4 overflow-hidden rounded-lg border border-white/10">
-                <img src={deleteTargetPictureUrl} alt="To delete" className="w-full h-40 object-cover" />
-              </div>
-            )}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setIsDeletePicModalOpen(false); setDeleteTargetPictureId(null); setDeleteTargetPictureUrl(null); }}
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (!deleteTargetPictureId || !deleteTargetPictureUrl) return;
-                  setDeletePicLoading(true);
-                  try {
-                    await handleDeletePicture(deleteTargetPictureId, deleteTargetPictureUrl);
-                    setIsDeletePicModalOpen(false);
-                    setDeleteTargetPictureId(null);
-                    setDeleteTargetPictureUrl(null);
-                  } finally {
-                    setDeletePicLoading(false);
-                  }
-                }}
-                disabled={deletePicLoading}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white"
-              >
-                {deletePicLoading ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            if (deleteAlsoImages) {
+              const listPath = `${STORAGE_PREFIX}/${cat.slug}`;
+              const { data: files, error: listError } = await supabase.storage
+                .from(STORAGE_BUCKET)
+                .list(listPath, { limit: 1000 });
+              if (listError) throw listError;
+              const pathsToRemove = (files || [])
+                .filter(item => item && item.name)
+                .map(item => `${listPath}/${item.name}`);
+              if (pathsToRemove.length > 0) {
+                const { error: rmErr } = await supabase.storage
+                  .from(STORAGE_BUCKET)
+                  .remove(pathsToRemove);
+                if (rmErr) throw rmErr;
+              }
+              const { error: picsErr } = await supabase
+                .from('pictures')
+                .delete()
+                .eq('category_id', catId);
+              if (picsErr) throw picsErr;
+            }
 
-      {/* Confirm Delete Modal */}
-      {isDeleteModalOpen && deleteTargetCategoryId && deleteTargetInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-lg bg-slate-900/50 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-2">Delete Category</h3>
-            <p className="text-gray-300 mb-4">
-              Are you sure you want to delete "{deleteTargetInfo.name_am}" (<span className="text-gray-400">{deleteTargetInfo.slug}</span>)?
-            </p>
-            <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3 mb-4 text-sm text-gray-300">
-              {deleteImageCount === null ? 'Checking images in this category...' : (
-                deleteImageCount > 0 ? (
-                  <>
-                    <div>This category contains <span className="text-white font-semibold">{deleteImageCount}</span> image(s).</div>
-                    <label className="mt-2 flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={deleteAlsoImages}
-                        onChange={(e) => setDeleteAlsoImages(e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                      <span>Also delete all images from storage</span>
-                    </label>
-                  </>
-                ) : (
-                  <div>No images found in this category.</div>
-                )
-              )}
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setIsDeleteModalOpen(false); setDeleteTargetCategoryId(null); setDeleteTargetInfo(null); }}
-                className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  if (deleteImageCount && deleteImageCount > 0 && !deleteAlsoImages) {
-                    showToast('info', 'This category has images. Check the box to also delete images, or cancel.');
-                    return;
-                  }
-                  setDeleteLoading(true);
-                  // If deleting images too, call existing handleDeleteCategory logic; otherwise skip storage removal
-                  try {
-                    const catId = deleteTargetCategoryId;
-                    const cat = categories.find(c => c.id === catId);
-                    if (!cat) throw new Error('Category not found');
+            const { error: catErr } = await supabase
+              .from('categories')
+              .delete()
+              .eq('id', catId);
+            if (catErr) throw catErr;
 
-                    if (deleteAlsoImages) {
-                      // List and remove files under public/<slug>
-                      const listPath = `${STORAGE_PREFIX}/${cat.slug}`;
-                      const { data: files, error: listError } = await supabase.storage
-                        .from(STORAGE_BUCKET)
-                        .list(listPath, { limit: 1000 });
-                      if (listError) throw listError;
-                      const pathsToRemove = (files || [])
-                        .filter(item => item && item.name)
-                        .map(item => `${listPath}/${item.name}`);
-                      if (pathsToRemove.length > 0) {
-                        const { error: rmErr } = await supabase.storage
-                          .from(STORAGE_BUCKET)
-                          .remove(pathsToRemove);
-                        if (rmErr) throw rmErr;
-                      }
-                      const { error: picsErr } = await supabase
-                        .from('pictures')
-                        .delete()
-                        .eq('category_id', catId);
-                      if (picsErr) throw picsErr;
-                    }
-
-                    const { error: catErr } = await supabase
-                      .from('categories')
-                      .delete()
-                      .eq('id', catId);
-                    if (catErr) throw catErr;
-
-                    await fetchCategories();
-                    await fetchPictures();
-                    setIsDeleteModalOpen(false);
-                    setDeleteTargetCategoryId(null);
-                    setDeleteTargetInfo(null);
-                    showToast('success', 'Category deleted successfully');
-                  } catch (err) {
-                    console.error('Delete category failed:', err);
-                    showToast('error', 'Delete failed: ' + ((err as any)?.message || JSON.stringify(err)));
-                  } finally {
-                    setDeleteLoading(false);
-                  }
-                }}
-                disabled={deleteLoading}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white"
-              >
-                {deleteLoading ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Profile Picture Category Double Confirmation Modal */}
-      {isProfileDeleteConfirmOpen && deleteTargetCategoryId && deleteTargetInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-lg bg-slate-900/50 backdrop-blur-xl border border-white/20 rounded-2xl p-6">
-            {profileDeleteStep === 1 ? (
-              <>
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Trash2 className="w-8 h-8 text-red-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">⚠️ Delete About Me Category</h3>
-                  <p className="text-gray-300 mb-4">
-                    You are about to delete the <span className="text-red-400 font-semibold">"About Me"</span> category.
-                  </p>
-                </div>
-                
-                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 mb-6">
-                  <h4 className="text-red-400 font-semibold mb-2">⚠️ Important Warning:</h4>
-                  <ul className="text-sm text-gray-300 space-y-1">
-                    <li>• You will <span className="text-red-400 font-semibold">lose your About Me image</span></li>
-                    <li>• The website will have <span className="text-red-400 font-semibold">no About Me image</span> to display</li>
-                    <li>• All images in this category will be deleted</li>
-                    <li>• You'll need to recreate the category and upload new images</li>
-                  </ul>
-                </div>
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => {
-                      setIsProfileDeleteConfirmOpen(false);
-                      setDeleteTargetCategoryId(null);
-                      setDeleteTargetInfo(null);
-                      setProfileDeleteStep(1);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => setProfileDeleteStep(2)}
-                    className="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white"
-                  >
-                    I Understand, Continue
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Trash2 className="w-8 h-8 text-red-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Final Confirmation</h3>
-                  <p className="text-gray-300 mb-4">
-                    Are you absolutely sure you want to delete the <span className="text-red-400 font-semibold">"Profile picture"</span> category?
-                  </p>
-                </div>
-
-                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4 mb-6">
-                  <p className="text-red-300 text-sm text-center">
-                    This action cannot be undone. You will lose your profile picture and need to recreate everything.
-                  </p>
-                </div>
-
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => setProfileDeleteStep(1)}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white"
-                  >
-                    Go Back
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setDeleteLoading(true);
-                      try {
-                        // Delete the category and all its images
-                        await handleDeleteCategory(deleteTargetCategoryId, deleteTargetInfo.slug);
-                        
-
-                        // Reset about me category state
-                        setProfilePictureCategory(null);
-                        setShowCreateProfileCategory(true);
-
-                        setIsProfileDeleteConfirmOpen(false);
-                        setDeleteTargetCategoryId(null);
-                        setDeleteTargetInfo(null);
-                        setProfileDeleteStep(1);
-                        
-                        showToast('success', 'Profile picture category deleted. You no longer have a profile picture.');
-                      } catch (err) {
-                        console.error('Delete profile category failed:', err);
-                        showToast('error', 'Delete failed: ' + ((err as any)?.message || 'Unknown error'));
-                      } finally {
-                        setDeleteLoading(false);
-                      }
-                    }}
-                    disabled={deleteLoading}
-                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white"
-                  >
-                    {deleteLoading ? 'Deleting...' : 'Yes, Delete Forever'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+            await fetchCategories();
+            await fetchPictures();
+            setIsDeleteModalOpen(false);
+            setDeleteTargetCategoryId(null);
+            setDeleteTargetInfo(null);
+            showToast('success', 'Category deleted successfully');
+          } catch (err) {
+            console.error('Delete category failed:', err);
+            showToast('error', 'Delete failed: ' + ((err as any)?.message || JSON.stringify(err)));
+          } finally {
+            setDeleteLoading(false);
+          }
+        }}
+        showToast={showToast}
+        isProfileDeleteConfirmOpen={isProfileDeleteConfirmOpen}
+        profileDeleteStep={profileDeleteStep}
+        setProfileDeleteStep={setProfileDeleteStep}
+        onCloseProfileDeleteModal={() => {
+          setIsProfileDeleteConfirmOpen(false);
+          setDeleteTargetCategoryId(null);
+          setDeleteTargetInfo(null);
+          setProfileDeleteStep(1);
+        }}
+        onConfirmDeleteProfileCategory={async () => {
+          setDeleteLoading(true);
+          try {
+            await handleDeleteCategory(deleteTargetCategoryId!, deleteTargetInfo!.slug);
+            setProfilePictureCategory(null);
+            setShowCreateProfileCategory(true);
+            setIsProfileDeleteConfirmOpen(false);
+            setDeleteTargetCategoryId(null);
+            setDeleteTargetInfo(null);
+            setProfileDeleteStep(1);
+            showToast('success', 'Profile picture category deleted. You no longer have a profile picture.');
+          } catch (err) {
+            console.error('Delete profile category failed:', err);
+            showToast('error', 'Delete failed: ' + ((err as any)?.message || 'Unknown error'));
+          } finally {
+            setDeleteLoading(false);
+          }
+        }}
+        showAboutMeDeleteModal={showAboutMeDeleteModal}
+        aboutMeImageToDelete={aboutMeImageToDelete}
+        profilePictureLoading={profilePictureLoading}
+        onCloseAboutMeDeleteModal={() => {
+          setShowAboutMeDeleteModal(false);
+          setAboutMeImageToDelete(null);
+        }}
+        onConfirmDeleteAboutMeImage={() => {
+          if (aboutMeImageToDelete) {
+            deleteSpecificAboutMeImage(aboutMeImageToDelete);
+          }
+        }}
+      />
 
       {/* Profile Picture Upload Modal */}
       {showProfileUpload && profilePictureCategory && (
@@ -3015,83 +1766,7 @@ const AdminPanel: React.FC<AdminPanelProps> = memo(({ initialSection = 'overview
       )}
 
 
-      {/* Toasts */}
-      <div className="fixed top-4 right-4 z-[100] space-y-2">
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            className={`min-w-[260px] max-w-xs px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md animate-[fadeIn_.2s_ease-out] text-sm
-              ${t.type === 'success' ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200' : ''}
-              ${t.type === 'error' ? 'bg-red-500/15 border-red-400/30 text-red-200' : ''}
-              ${t.type === 'info' ? 'bg-blue-500/15 border-blue-400/30 text-blue-200' : ''}
-            `}
-          >
-            {t.message}
-          </div>
-        ))}
-      </div>
-
-      {/* Modern About Me Delete Confirmation Modal */}
-      {showAboutMeDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl max-w-md w-full mx-4 transform transition-all">
-            <div className="p-6">
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
-                  <X className="w-5 h-5 text-red-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Delete About Me Image</h3>
-                  <p className="text-sm text-gray-400">This action cannot be undone</p>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="mb-6">
-                <p className="text-gray-300 mb-3">
-                  Are you sure you want to delete this About Me image?
-                </p>
-                <div className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
-                  <p className="text-sm text-gray-400">
-                    💡 <strong>Tip:</strong> You can upload a new image after deletion to replace it.
-                  </p>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowAboutMeDeleteModal(false);
-                    setAboutMeImageToDelete(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => aboutMeImageToDelete && deleteSpecificAboutMeImage(aboutMeImageToDelete)}
-                  disabled={profilePictureLoading}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-600/50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                  {profilePictureLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <X className="w-4 h-4" />
-                      Delete Image
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ToastContainer toasts={toasts} />
 
       {/* Conversion Confirmation Modal */}
       {showConversionPrompt && (
