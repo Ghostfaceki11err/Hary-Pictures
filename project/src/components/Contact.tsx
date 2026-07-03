@@ -2,20 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Mail, Phone, MapPin, Clock, Send, Instagram, CheckCircle, AlertCircle, User, MessageSquare, Calendar, Camera, ArrowRight } from 'lucide-react';
 import { supabase } from '../admin/supabaseClient';
 
-// Custom TikTok icon component
-const TikTokIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className={className}
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
-  </svg>
-);
-
 // Custom Telegram SVG component
 const TelegramIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -66,8 +52,6 @@ const Contact: React.FC = () => {
   const [submissionAttempts, setSubmissionAttempts] = useState<number>(0);
   const [lastSubmissionTime, setLastSubmissionTime] = useState<number>(0);
   const [csrfToken, setCsrfToken] = useState<string>('');
-  const [mathChallenge, setMathChallenge] = useState<{question: string, answer: number}>({question: '', answer: 0});
-  const [userAnswer, setUserAnswer] = useState<string>('');
   const [showErrorPopup, setShowErrorPopup] = useState(false);
   const [telegramValidationStatus, setTelegramValidationStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
   const [emailValidationStatus, setEmailValidationStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
@@ -98,14 +82,12 @@ const Contact: React.FC = () => {
       .replace(/<[^>]*>/g, '') // Remove any remaining HTML tags
       .replace(/javascript:/gi, '') // Remove javascript: protocol
       .replace(/on\w+\s*=/gi, ''); // Remove event handlers
-      // Note: No .trim() to preserve leading/trailing spaces during typing
   };
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email) && email.length <= 254;
   };
-
 
   const validatePhone = (phone: string): boolean => {
     // Validate Ethiopian phone format: 0[1-9][0-9]{7,8} (matches DB constraint)
@@ -133,41 +115,6 @@ const Contact: React.FC = () => {
     }
 
     return submissionAttempts >= maxAttempts;
-  };
-
-  const generateMathChallenge = (): {question: string, answer: number} => {
-    const operations = ['+', '-', '×'];
-    const operation = operations[Math.floor(Math.random() * operations.length)];
-    
-    let num1: number, num2: number, answer: number, question: string;
-    
-    switch (operation) {
-      case '+':
-        num1 = Math.floor(Math.random() * 20) + 1;
-        num2 = Math.floor(Math.random() * 20) + 1;
-        answer = num1 + num2;
-        question = `${num1} + ${num2}`;
-        break;
-      case '-':
-        num1 = Math.floor(Math.random() * 20) + 10;
-        num2 = Math.floor(Math.random() * 10) + 1;
-        answer = num1 - num2;
-        question = `${num1} - ${num2}`;
-        break;
-      case '×':
-        num1 = Math.floor(Math.random() * 10) + 1;
-        num2 = Math.floor(Math.random() * 10) + 1;
-        answer = num1 * num2;
-        question = `${num1} × ${num2}`;
-        break;
-      default:
-        num1 = 5;
-        num2 = 3;
-        answer = 8;
-        question = '5 + 3';
-    }
-    
-    return { question, answer };
   };
 
   // Utility functions
@@ -199,7 +146,6 @@ const Contact: React.FC = () => {
     return sanitizedValue;
   };
 
-
   const focusNextField = (currentField: string) => {
     const fieldOrder = ['name', 'email', 'telegram', 'phone', 'service', 'date', 'message'];
     const currentIndex = fieldOrder.indexOf(currentField);
@@ -210,7 +156,7 @@ const Contact: React.FC = () => {
     }
   };
 
-  // Generate CSRF token and math challenge on component mount
+  // Generate CSRF token on component mount
   useEffect(() => {
     const generateCSRFToken = () => {
       const array = new Uint8Array(32);
@@ -218,7 +164,6 @@ const Contact: React.FC = () => {
       return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
     };
     setCsrfToken(generateCSRFToken());
-    setMathChallenge(generateMathChallenge());
   }, []);
 
   // Function to get client IP (limited on client-side)
@@ -252,7 +197,6 @@ const Contact: React.FC = () => {
     }
   }, []);
 
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -267,8 +211,6 @@ const Contact: React.FC = () => {
           date: '',
           message: ''
         });
-        setUserAnswer('');
-        setMathChallenge(generateMathChallenge());
         localStorage.removeItem('contactFormDraft');
         nameRef.current?.focus();
       }
@@ -303,7 +245,6 @@ const Contact: React.FC = () => {
       }
     } catch (error) {
       console.error("Error calling Telegram function:", error);
-      // Don't throw error - let form submission continue
     }
   };
 
@@ -495,25 +436,6 @@ const Contact: React.FC = () => {
         return;
       }
 
-      // Math challenge validation
-      const userAnswerNum = parseInt(userAnswer.trim());
-      console.log('Math challenge validation:', {
-        userAnswer: userAnswer,
-        userAnswerNum: userAnswerNum,
-        expectedAnswer: mathChallenge.answer,
-        question: mathChallenge.question
-      });
-      
-      if (isNaN(userAnswerNum) || userAnswerNum !== mathChallenge.answer) {
-        setFormStatus('error');
-        setErrorMessage(`Math challenge incorrect. Please solve: ${mathChallenge.question} = ?`);
-        setShowErrorPopup(true);
-        // Generate new challenge
-        setMathChallenge(generateMathChallenge());
-        setUserAnswer('');
-        return;
-      }
-
       // Get client IP address
       const clientIP = await getClientIP();
 
@@ -554,7 +476,7 @@ const Contact: React.FC = () => {
       console.log('Data successfully stored in Supabase');
 
       // Prepare modern Telegram message with sanitized data
-      const contactInfo = formData.contactType === 'email' 
+      const contactInfoMsg = formData.contactType === 'email' 
         ? `✉️ *Email:* ${sanitizedData.email}`
         : `📱 *Telegram:* ${sanitizedData.telegram_username ? `@${sanitizedData.telegram_username}` : 'Not provided'}`;
       
@@ -588,7 +510,7 @@ const Contact: React.FC = () => {
       const message = `
 🆕 *New Contact Form Submission* ────────────
 👤 *Name:* ${sanitizedData.name}
-${contactInfo}
+${contactInfoMsg}
 📞 *Phone:* ${sanitizedData.phone || 'N/A'}
 
 🖼️ *Service:* ${sanitizedData.service || 'N/A'}
@@ -613,18 +535,16 @@ ${sanitizedData.message}
       setFormStatus('success');
       setShowSuccessAnimation(true);
       localStorage.removeItem('contactFormDraft');
-    setFormData({
-      name: '',
+      setFormData({
+        name: '',
         contactType: 'email',
-      email: '',
+        email: '',
         telegram: '',
-      phone: '',
-      service: '',
-      date: '',
-      message: ''
-    });
-      setUserAnswer('');
-      setMathChallenge(generateMathChallenge());
+        phone: '',
+        service: '',
+        date: '',
+        message: ''
+      });
       
       // Hide success animation after 3 seconds
       setTimeout(() => setShowSuccessAnimation(false), 3000);
@@ -658,261 +578,335 @@ ${sanitizedData.message}
       icon: MapPin,
       title: 'Location',
       value: 'Addis Ababa, A.A',
-      
     },
     {
       icon: Clock,
       title: 'Hours',
       value: 'Mon-Fri: 3AM-6PM',
-      
     }
   ];
 
   const socialLinks = [
-    { icon: Instagram, name: 'Instagram', url: 'https://www.instagram.com/hary_picture7/?igsh=MXFqeDFmeGFxdXRzNQ%3D%3D#', handle: '@hary_picture7' },
+    { icon: Instagram, name: 'Instagram', url: 'https://www.instagram.com/hary_picture7', handle: '@hary_picture7' },
     { icon: TelegramIcon, name: 'Telegram', url: 'https://t.me/harygraphic', handle: '@harygraphic' },
   ];
 
   return (
-    <div className="min-h-screen pt-20 relative overflow-hidden bg-black">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
+    <div className="min-h-screen pt-20 relative overflow-hidden bg-black selection:bg-blue-500/30 selection:text-blue-200">
+      {/* Animated Abstract Background Grid & Bokeh */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(to_right,#1f293702_1px,transparent_1px),linear-gradient(to_bottom,#1f293702_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-gradient-to-br from-blue-600/10 via-purple-600/5 to-transparent rounded-full blur-3xl animate-pulse duration-[8000ms]"></div>
+        <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] bg-gradient-to-tr from-cyan-600/10 via-emerald-600/5 to-transparent rounded-full blur-3xl animate-pulse duration-[10000ms] delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-blue-500/5 to-purple-500/5 rounded-full blur-3xl animate-pulse duration-[12000ms] delay-500"></div>
       </div>
 
-      {/* Floating Elements */}
-      <div className="absolute top-20 left-10 w-4 h-4 bg-blue-400/30 rounded-full animate-bounce delay-300"></div>
-      <div className="absolute top-40 right-20 w-6 h-6 bg-purple-400/30 rounded-full animate-bounce delay-700"></div>
-      <div className="absolute bottom-40 left-20 w-3 h-3 bg-cyan-400/30 rounded-full animate-bounce delay-1000"></div>
-      <div className="absolute top-60 right-1/3 w-5 h-5 bg-pink-400/30 rounded-full animate-bounce delay-500"></div>
+      {/* Floating lens-flare circles */}
+      <div className="absolute top-[15%] left-[5%] w-72 h-72 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 rounded-full blur-2xl animate-pulse duration-5000"></div>
+      <div className="absolute bottom-[20%] right-[10%] w-96 h-96 bg-gradient-to-tl from-purple-500/5 to-pink-500/5 rounded-full blur-3xl animate-pulse duration-7000"></div>
 
-      {/* Contact Form & Info */}
-      <section className="pb-20 relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-            {/* Contact Form */}
-            <div className="xl:col-span-2 relative">
-              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-cyan-600/20 rounded-3xl blur-sm"></div>
-              <div className="relative bg-slate-800/80 backdrop-blur-sm rounded-3xl p-8 shadow-2xl border border-slate-700/50 overflow-hidden">
-                {/* Form Header */}
-                <div className="text-center mb-8">
-                  <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-full px-6 py-3 mb-4">
-                    <MessageSquare className="w-6 h-6 text-blue-400" />
-                    <span className="text-white font-semibold">Send Me a Message</span>
-                  </div>
-                  <p className="text-gray-400 text-sm">Fill out the form below and I'll get back to you within 24 hours</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 pb-24">
+        {/* Dynamic Page Header */}
+        <div className="text-center max-w-3xl mx-auto mb-16 pt-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-6">
+            <Camera className="w-4 h-4" />
+            <span>Connect & Create</span>
+          </div>
+          <h1 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight mb-6">
+            Let's Capture Your <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">Story</span>
+          </h1>
+          <p className="text-gray-400 text-lg sm:text-xl leading-relaxed">
+            Have a project in mind, a wedding to document, or want to collaborate? Reach out below and let's bring your vision to life.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Viewfinder Camera Mockup & Info Panel */}
+          <div className="lg:col-span-5 space-y-8">
+            {/* Viewfinder Preview */}
+            <div className="relative group overflow-hidden bg-slate-900/60 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-2xl p-6 transition-all duration-500 hover:border-blue-500/30">
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/20 to-slate-950/50 pointer-events-none"></div>
+              
+              {/* Camera Viewfinder Elements */}
+              {/* Corner brackets */}
+              <div className="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-slate-600 group-hover:border-blue-400 transition-colors duration-300"></div>
+              <div className="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-slate-600 group-hover:border-blue-400 transition-colors duration-300"></div>
+              <div className="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-slate-600 group-hover:border-blue-400 transition-colors duration-300"></div>
+              <div className="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-slate-600 group-hover:border-blue-400 transition-colors duration-300"></div>
+              
+              {/* Center Crosshairs */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity duration-300">
+                <div className="w-8 h-8 border border-white rounded-full flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                 </div>
+              </div>
+
+              {/* Viewfinder status overlay */}
+              <div className="flex justify-between items-center text-xs font-mono text-slate-400 mb-8 relative z-10">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                  <span className="text-red-500 font-bold tracking-wider">REC</span>
+                </div>
+                <div>RAW 16bit</div>
+                <div className="flex items-center gap-1">
+                  <span>ISO 100</span>
+                  <span className="text-slate-600">|</span>
+                  <span>f/1.8</span>
+                  <span className="text-slate-600">|</span>
+                  <span>1/250s</span>
+                </div>
+              </div>
+
+              {/* Viewfinder display text */}
+              <div className="py-10 text-center relative z-10">
+                <p className="text-sm font-mono text-blue-400 uppercase tracking-widest mb-2">Focal Point</p>
+                <h3 className="text-2xl font-bold text-white tracking-wide mb-4">
+                  {formData.name ? `Subject: ${formData.name}` : "Every Frame Tells a Story"}
+                </h3>
+                <p className="text-slate-400 text-sm max-w-xs mx-auto leading-relaxed">
+                  "Photography is the story I fail to put into words." Let's create something timeless.
+                </p>
+              </div>
+
+              {/* Dynamic Camera Settings Panel */}
+              <div className="mt-8 pt-6 border-t border-slate-800/80 flex justify-between items-center font-mono text-[10px] sm:text-xs text-slate-400 relative z-10">
+                <div>
+                  <span className="text-slate-500">MODE: </span>
+                  <span className="text-cyan-400 font-bold uppercase">
+                    {formData.service ? `${formData.service}` : 'MANUAL'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">DATE: </span>
+                  <span className="text-emerald-400 font-bold">
+                    {formData.date ? `${formData.date}` : new Date().toISOString().split('T')[0]}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">FOCUS: </span>
+                  <span className="text-purple-400 font-bold">AF-S</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Details List */}
+            <div className="grid grid-cols-1 gap-4">
+              {contactInfo.map((info, index) => {
+                const isCopyable = info.title === 'Email' || info.title === 'Phone';
+                return (
+                  <div
+                    key={index}
+                    onClick={isCopyable ? async () => {
+                      await navigator.clipboard.writeText(info.value);
+                      setCopiedIndex(index);
+                      setTimeout(() => setCopiedIndex(null), 1500);
+                    } : undefined}
+                    className={`group relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm p-4 flex items-center transition-all duration-300 ${
+                      isCopyable ? 'cursor-pointer hover:border-blue-500/20 hover:bg-slate-900/60 hover:-translate-y-1' : 'cursor-default'
+                    }`}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/10 p-3 rounded-xl mr-4 text-blue-400 group-hover:scale-110 transition-transform duration-300">
+                      <info.icon size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">{info.title}</span>
+                      <p className="text-slate-200 text-sm font-medium mt-0.5">
+                        {info.value}
+                        {copiedIndex === index && (
+                          <span className="ml-2 text-green-400 font-bold text-[10px] animate-pulse">✓ Copied</span>
+                        )}
+                      </p>
+                    </div>
+                    {isCopyable && (
+                      <div className="text-slate-600 group-hover:text-blue-400 transition-colors duration-300 pr-1">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Social Links Panel */}
+            <div className="bg-slate-900/40 backdrop-blur-sm rounded-3xl border border-slate-800/60 p-6">
+              <h4 className="text-white font-bold text-sm uppercase tracking-wider mb-4 text-center sm:text-left">Follow My Journey</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {socialLinks.map((social, index) => (
+                  <a
+                    key={index}
+                    href={social.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center p-3 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-cyan-500/20 hover:bg-slate-800/60 transition-all duration-300 hover:-translate-y-0.5"
+                  >
+                    <div className="bg-slate-800 p-2.5 rounded-xl text-slate-400 group-hover:text-cyan-400 group-hover:bg-cyan-500/10 transition-all duration-300 mr-3">
+                      <social.icon size={18} />
+                    </div>
+                    <div>
+                      <div className="text-slate-200 text-xs font-bold">{social.name}</div>
+                      <div className="text-slate-500 text-[10px]">{social.handle}</div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Form Container */}
+          <div className="lg:col-span-7 relative">
+            <div className="absolute -inset-1.5 bg-gradient-to-r from-blue-600/30 via-purple-600/30 to-cyan-600/30 rounded-[32px] blur-md opacity-70"></div>
+            
+            <div className="relative bg-slate-900/90 backdrop-blur-md rounded-3xl p-6 sm:p-10 shadow-2xl border border-slate-800/80 overflow-hidden">
+              {/* Form subtle glass elements */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+              
               {/* Success Animation Overlay */}
               {showSuccessAnimation && (
-                <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center z-50">
-                  <div className="text-center">
-                    <div className="animate-bounce">
-                      <CheckCircle size={64} className="text-green-400 mx-auto mb-4" />
+                <div className="absolute inset-0 bg-slate-950/90 flex items-center justify-center z-50">
+                  <div className="text-center p-8 max-w-md">
+                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/30 animate-bounce">
+                      <CheckCircle size={40} className="text-green-400" />
                     </div>
-                    <h3 className="text-2xl font-bold text-green-400 mb-2">Message Sent!</h3>
-                    <p className="text-green-300">Thank you for your inquiry</p>
+                    <h3 className="text-2xl font-bold text-white mb-2">Message Transmitted!</h3>
+                    <p className="text-slate-400 mb-6">
+                      Thank you for choosing Hary Pictures. I'll get back to you within 24 hours.
+                    </p>
+                    <button 
+                      onClick={() => setShowSuccessAnimation(false)}
+                      className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+                    >
+                      Dismiss
+                    </button>
                   </div>
                 </div>
               )}
 
-              <h2 className="text-3xl font-bold text-white mb-8">Send Me a Message</h2>
-              
-              <form 
-                onSubmit={handleSubmit} 
-                className="space-y-6"
-              >
+              {/* Form Title & Sub */}
+              <div className="mb-8">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Send Me a Message</h2>
+                <p className="text-slate-400 text-xs sm:text-sm mt-2">
+                  Have an event or project in mind? Let's discuss details and tailor a custom session.
+                </p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Hidden CSRF Token */}
                 <input type="hidden" name="csrf_token" value={csrfToken} />
                 
-                {/* Honeypot field to catch bots */}
+                {/* Honeypot field */}
                 <div style={{ display: 'none' }}>
                   <label htmlFor="website">Website (leave empty):</label>
                   <input type="text" id="website" name="website" tabIndex={-1} autoComplete="off" />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="relative group">
-                    <div className="relative">
-                      <User className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                        focusedField === 'name' ? 'text-blue-400' : 'text-gray-400'
-                      }`} />
-                    <input
-                        ref={nameRef}
-                      type="text"
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                        onKeyDown={(e) => handleKeyDown(e, 'name')}
-                        onFocus={() => handleFieldFocus('name')}
-                        onBlur={handleFieldBlur}
-                      required
-                        className={`w-full pl-12 pr-4 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 ${
-                          focusedField === 'name' 
-                            ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                            : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                        }`}
-                      placeholder="Your full name"
-                    />
-                      <label 
-                        htmlFor="name" 
-                        className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                          formData.name || focusedField === 'name'
-                            ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                            : 'top-2 text-sm text-gray-400'
-                        }`}
-                      >
-                        Full Name *
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div className="relative group">
-                    <div className="relative">
-                      {/* Modern Toggle Switch */}
-                      <div className="relative bg-slate-700/50 rounded-xl p-0.5 border-2 border-slate-600 hover:border-slate-500 transition-all duration-300">
-                        <div className="flex relative">
-                          {/* Toggle Background */}
-                          <div className={`absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg transition-all duration-500 ease-in-out ${
-                            formData.contactType === 'email' ? 'w-1/2' : 'w-1/2 translate-x-full'
-                          }`} />
-                          
-                          {/* Email Option */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, contactType: 'email' }));
-                              handleFieldFocus('contactType');
-                              // Validate email if it has a value
-                              if (formData.email) {
-                                validateEmailRealTime(formData.email);
-                              }
-                            }}
-                            className={`relative z-10 flex-1 flex items-center justify-center py-2 px-3 rounded-lg transition-all duration-300 ${
-                              formData.contactType === 'email' 
-                                ? 'text-white font-medium' 
-                                : 'text-gray-400 hover:text-gray-300'
-                            }`}
-                          >
-                            <Mail className="w-5 h-5 mr-2" />
-                            <span className="text-sm">Email</span>
-                          </button>
-                          
-                          {/* Telegram Option */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, contactType: 'telegram' }));
-                              handleFieldFocus('contactType');
-                              // Reset email validation when switching to Telegram
-                              setEmailValidationStatus('idle');
-                            }}
-                            className={`relative z-10 flex-1 flex items-center justify-center py-2 px-3 rounded-lg transition-all duration-300 ${
-                              formData.contactType === 'telegram' 
-                                ? 'text-white font-medium' 
-                                : 'text-gray-400 hover:text-gray-300'
-                            }`}
-                          >
-                            <TelegramIcon className="w-5 h-5 mr-2" />
-                            <span className="text-sm">Telegram</span>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      {/* Selection Indicator */}
-                      <div className="mt-1 flex items-center justify-center">
-                        <div className="flex items-center space-x-2 text-xs text-gray-400">
-                          <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                            formData.contactType === 'email' ? 'bg-blue-400' : 'bg-gray-600'
-                          }`} />
-                          <span>
-                            {formData.contactType === 'email' 
-                              ? 'We\'ll contact you via email' 
-                              : 'We\'ll contact you via Telegram'
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+
+                {/* Name field */}
+                <div className="relative group">
+                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300">
+                    <User size={18} />
+                  </span>
+                  <input
+                    ref={nameRef}
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    onKeyDown={(e) => handleKeyDown(e, 'name')}
+                    onFocus={() => handleFieldFocus('name')}
+                    onBlur={handleFieldBlur}
+                    required
+                    placeholder="Your Full Name"
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-950 transition-all duration-300"
+                  />
                 </div>
 
-                {/* Dynamic Contact Field */}
-                <div className="relative group">
-                  <div className="relative">
-                    {formData.contactType === 'email' ? (
-                      <>
-                        <Mail className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                          focusedField === 'email' ? 'text-blue-400' : 'text-gray-400'
-                        }`} />
-                    <div className="relative">
-                      <input
-                        ref={emailRef}
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        onKeyDown={(e) => handleKeyDown(e, 'email')}
-                        onFocus={() => handleFieldFocus('email')}
-                        onBlur={handleFieldBlur}
-                        required={formData.contactType === 'email'}
-                        className={`w-full pl-12 pr-12 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 ${
-                          emailValidationStatus === 'valid' 
-                            ? 'border-green-500 bg-slate-700/80 shadow-lg shadow-green-500/20'
-                            : emailValidationStatus === 'invalid'
-                            ? 'border-red-500 bg-slate-700/80 shadow-lg shadow-red-500/20'
-                            : focusedField === 'email' 
-                            ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                            : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                        }`}
-                        placeholder="your@email.com"
+                {/* Toggle & Contact Input Area */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                  {/* Contact Type Toggle */}
+                  <div className="md:col-span-5">
+                    <div className="flex bg-slate-950/80 border border-slate-800/80 p-1 rounded-2xl relative">
+                      <div 
+                        className="absolute top-1 bottom-1 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl transition-all duration-300 ease-out"
+                        style={{
+                          left: formData.contactType === 'email' ? '4px' : 'calc(50% + 2px)',
+                          width: 'calc(50% - 6px)'
+                        }}
                       />
-                      {/* Validation status icon */}
-                      {formData.email && emailValidationStatus !== 'idle' && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          {emailValidationStatus === 'checking' && (
-                            <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                          )}
-                          {emailValidationStatus === 'valid' && (
-                            <CheckCircle className="w-5 h-5 text-green-400" />
-                          )}
-                          {emailValidationStatus === 'invalid' && (
-                            <AlertCircle className="w-5 h-5 text-red-400" />
-                          )}
-                        </div>
-                      )}
+                      
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, contactType: 'email' }));
+                          handleFieldFocus('contactType');
+                          if (formData.email) validateEmailRealTime(formData.email);
+                        }}
+                        className={`relative z-10 flex-1 py-2 text-center text-xs font-semibold transition-colors duration-300 flex items-center justify-center gap-1.5 ${
+                          formData.contactType === 'email' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Mail size={14} />
+                        <span>Email</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, contactType: 'telegram' }));
+                          handleFieldFocus('contactType');
+                          setEmailValidationStatus('idle');
+                        }}
+                        className={`relative z-10 flex-1 py-2 text-center text-xs font-semibold transition-colors duration-300 flex items-center justify-center gap-1.5 ${
+                          formData.contactType === 'telegram' ? 'text-white' : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <TelegramIcon size={14} />
+                        <span>Telegram</span>
+                      </button>
                     </div>
-                    <label 
-                      htmlFor="email" 
-                      className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                        formData.email || focusedField === 'email'
-                          ? emailValidationStatus === 'valid'
-                            ? 'top-1 text-xs text-green-400 bg-slate-800/50 px-1 rounded'
-                            : emailValidationStatus === 'invalid'
-                            ? 'top-1 text-xs text-red-400 bg-slate-800/50 px-1 rounded'
-                            : 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                          : 'top-2 text-sm text-gray-400'
-                      }`}
-                    >
-                      Email Address *
-                      {formData.email && emailValidationStatus === 'valid' && (
-                        <span className="ml-2 text-green-400">✓ Valid</span>
-                      )}
-                      {formData.email && emailValidationStatus === 'invalid' && (
-                        <span className="ml-2 text-red-400">✗ Invalid email format</span>
-                      )}
-                    </label>
-                      </>
-                    ) : (
-                      <>
-                        <TelegramIcon className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                          focusedField === 'telegram' ? 'text-blue-400' : 'text-gray-400'
-                        }`} />
-                        <div className="relative">
-                          {/* Visible @ prefix */}
-                          <span className="absolute left-12 top-1/2 transform -translate-y-1/2 text-white text-lg font-medium pointer-events-none">
+                  </div>
+
+                  {/* Dynamic Contact Field (Email or Telegram) */}
+                  <div className="md:col-span-7">
+                    <div className="relative group">
+                      {formData.contactType === 'email' ? (
+                        <>
+                          <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300">
+                            <Mail size={18} />
+                          </span>
+                          <input
+                            ref={emailRef}
+                            type="email"
+                            id="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleInputChange}
+                            onKeyDown={(e) => handleKeyDown(e, 'email')}
+                            onFocus={() => handleFieldFocus('email')}
+                            onBlur={handleFieldBlur}
+                            required={formData.contactType === 'email'}
+                            placeholder="your@email.com"
+                            className={`w-full pl-12 pr-10 py-3.5 bg-slate-950/60 border rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:bg-slate-950 transition-all duration-300 ${
+                              emailValidationStatus === 'valid' ? 'border-green-500/40' :
+                              emailValidationStatus === 'invalid' ? 'border-red-500/40' : 'border-slate-800/80 focus:border-blue-500/50'
+                            }`}
+                          />
+                          {formData.email && emailValidationStatus !== 'idle' && (
+                            <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                              {emailValidationStatus === 'checking' && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>}
+                              {emailValidationStatus === 'valid' && <CheckCircle size={16} className="text-green-400" />}
+                              {emailValidationStatus === 'invalid' && <AlertCircle size={16} className="text-red-400" />}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300">
+                            <TelegramIcon size={18} />
+                          </span>
+                          <span className="absolute left-10 top-1/2 transform -translate-y-1/2 text-slate-200 font-semibold text-sm select-none pointer-events-none">
                             @
                           </span>
                           <input
@@ -925,496 +919,163 @@ ${sanitizedData.message}
                             onKeyDown={(e) => handleKeyDown(e, 'telegram')}
                             onFocus={() => handleFieldFocus('telegram')}
                             onBlur={handleFieldBlur}
-                            required={false}
-                            className={`w-full pl-16 pr-12 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 ${
-                              telegramValidationStatus === 'valid' 
-                                ? 'border-green-500 bg-slate-700/80 shadow-lg shadow-green-500/20'
-                                : telegramValidationStatus === 'invalid'
-                                ? 'border-red-500 bg-slate-700/80 shadow-lg shadow-red-500/20'
-                                : focusedField === 'telegram' 
-                                ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                                : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                            }`}
                             placeholder="username"
+                            className={`w-full pl-16 pr-10 py-3.5 bg-slate-950/60 border rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:bg-slate-950 transition-all duration-300 ${
+                              telegramValidationStatus === 'valid' ? 'border-green-500/40' :
+                              telegramValidationStatus === 'invalid' ? 'border-red-500/40' : 'border-slate-800/80 focus:border-blue-500/50'
+                            }`}
                           />
-                          {/* Validation status icon */}
                           {formData.telegram && telegramValidationStatus !== 'idle' && (
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                              {telegramValidationStatus === 'checking' && (
-                                <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                              )}
-                              {telegramValidationStatus === 'valid' && (
-                                <CheckCircle className="w-5 h-5 text-green-400" />
-                              )}
-                              {telegramValidationStatus === 'invalid' && (
-                                <AlertCircle className="w-5 h-5 text-red-400" />
-                              )}
-                            </div>
+                            <span className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                              {telegramValidationStatus === 'checking' && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>}
+                              {telegramValidationStatus === 'valid' && <CheckCircle size={16} className="text-green-400" />}
+                              {telegramValidationStatus === 'invalid' && <AlertCircle size={16} className="text-red-400" />}
+                            </span>
                           )}
-                        </div>
-                        <label 
-                          htmlFor="telegram" 
-                          className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                            formData.telegram || focusedField === 'telegram'
-                              ? telegramValidationStatus === 'valid'
-                                ? 'top-1 text-xs text-green-400 bg-slate-800/50 px-1 rounded'
-                                : telegramValidationStatus === 'invalid'
-                                ? 'top-1 text-xs text-red-400 bg-slate-800/50 px-1 rounded'
-                                : 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                              : 'top-2 text-sm text-gray-400'
-                          }`}
-                        >
-                          Telegram Username
-                          {formData.telegram && telegramValidationStatus === 'valid' && (
-                            <span className="ml-2 text-green-400">✓ Valid</span>
-                          )}
-                          {formData.telegram && telegramValidationStatus === 'invalid' && (
-                            <span className="ml-2 text-red-400">✗ Invalid format</span>
-                          )}
-                        </label>
-                      </>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
+                {/* Phone & Service */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Phone */}
                   <div className="relative group">
-                    <div className="relative">
-                      <Phone className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                        focusedField === 'phone' ? 'text-blue-400' : 'text-gray-400'
-                      }`} />
+                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300">
+                      <Phone size={18} />
+                    </span>
                     <input
-                        ref={phoneRef}
+                      ref={phoneRef}
                       type="tel"
                       id="phone"
                       name="phone"
                       value={formData.phone}
                       onChange={handleInputChange}
-                        onKeyDown={(e) => handleKeyDown(e, 'phone')}
-                        onFocus={() => handleFieldFocus('phone')}
-                        onBlur={handleFieldBlur}
-                        className={`w-full pl-12 pr-4 py-4 border-2 rounded-xl text-white placeholder-gray-400 focus:outline-none transition-all duration-300 ${
-                          focusedField === 'phone' 
-                            ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                            : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                        }`}
-                      placeholder="0912345678"
+                      onKeyDown={(e) => handleKeyDown(e, 'phone')}
+                      onFocus={() => handleFieldFocus('phone')}
+                      onBlur={handleFieldBlur}
+                      placeholder="Phone Number (e.g. 0912345678)"
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-950 transition-all duration-300"
                     />
-                      <label 
-                        htmlFor="phone" 
-                        className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                          formData.phone || focusedField === 'phone'
-                            ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                            : 'top-2 text-sm text-gray-400'
-                        }`}
-                      >
-                        Phone Number
-                      </label>
-                    </div>
                   </div>
-                  
+
+                  {/* Service */}
                   <div className="relative group">
-                    <div className="relative">
-                      <Camera className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                        focusedField === 'service' ? 'text-blue-400' : 'text-gray-400'
-                      }`} />
+                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300 pointer-events-none">
+                      <Camera size={18} />
+                    </span>
                     <select
-                        ref={serviceRef}
+                      ref={serviceRef}
                       id="service"
                       name="service"
                       value={formData.service}
                       onChange={handleInputChange}
-                        onKeyDown={(e) => handleKeyDown(e, 'service')}
-                        onFocus={() => handleFieldFocus('service')}
-                        onBlur={handleFieldBlur}
-                        className={`w-full pl-12 pr-4 py-4 border-2 rounded-xl text-white focus:outline-none transition-all duration-300 appearance-none cursor-pointer ${
-                          focusedField === 'service' 
-                            ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                            : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                        }`}
+                      onKeyDown={(e) => handleKeyDown(e, 'service')}
+                      onFocus={() => handleFieldFocus('service')}
+                      onBlur={handleFieldBlur}
+                      className="w-full pl-12 pr-10 py-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-950 appearance-none cursor-pointer transition-all duration-300"
                     >
-                      <option value="">Select a service</option>
-                      <option value="wedding">Wedding Photography</option>
-                      <option value="portrait">Portrait Session</option>
-                      <option value="Street photography">Street photography</option>
-                      <option value="Real estate photography">Real estate photography</option>
-                      <option value="other">Other</option>
+                      <option value="" className="bg-slate-950">Select Photography Service</option>
+                      <option value="wedding" className="bg-slate-950">Wedding / Engagement Photography</option>
+                      <option value="portrait" className="bg-slate-950">Portrait / Studio Session</option>
+                      <option value="Street photography" className="bg-slate-950">Street & Urban Photography</option>
+                      <option value="Real estate photography" className="bg-slate-950">Real Estate & Space Photography</option>
+                      <option value="other" className="bg-slate-950">Other Event / Commercial shoot</option>
                     </select>
-                      <label 
-                        htmlFor="service" 
-                        className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                          formData.service || focusedField === 'service'
-                            ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                            : 'top-2 text-sm text-gray-400'
-                        }`}
-                      >
-                        Service Interested In
-                      </label>
-                      {/* Custom dropdown arrow */}
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
+                    <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-500 pointer-events-none">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </span>
                   </div>
                 </div>
 
+                {/* Preferred Date */}
                 <div className="relative group">
-                  <div className="relative">
-                    <Calendar className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 transition-colors duration-300 ${
-                      focusedField === 'date' ? 'text-blue-400' : 'text-gray-400'
-                    }`} />
+                  <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300 pointer-events-none">
+                    <Calendar size={18} />
+                  </span>
                   <input
-                      ref={dateRef}
+                    ref={dateRef}
                     type="date"
                     id="date"
                     name="date"
                     value={formData.date}
                     onChange={handleInputChange}
-                      onKeyDown={(e) => handleKeyDown(e, 'date')}
-                      onFocus={() => handleFieldFocus('date')}
-                      onBlur={handleFieldBlur}
-                      min={new Date().toISOString().split('T')[0]} // Prevent past dates
-                      className={`w-full pl-12 pr-12 py-4 border-2 rounded-xl text-white focus:outline-none transition-all duration-300 appearance-none cursor-pointer ${
-                        focusedField === 'date' 
-                          ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                          : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                      }`}
-                      style={{
-                        colorScheme: 'dark', // Dark theme for date picker
-                      }}
-                    />
-                      <label 
-                        htmlFor="date" 
-                        className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                          formData.date || focusedField === 'date'
-                            ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                            : 'top-2 text-sm text-gray-400'
-                        }`}
-                      >
-                        Preferred Date <span className="text-gray-500">(Optional)</span>
-                      </label>
-                    {/* Custom calendar icon overlay */}
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  {/* Date helper text */}
-                  <div className="mt-2 text-sm text-gray-400">
-                    {formData.date ? (
-                      <span className="text-green-400">
-                        ✓ Selected: {new Date(formData.date).toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    ) : (
-                      <span>Choose your preferred date for the service</span>
-                    )}
+                    onKeyDown={(e) => handleKeyDown(e, 'date')}
+                    onFocus={() => handleFieldFocus('date')}
+                    onBlur={handleFieldBlur}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-950 transition-all duration-300 cursor-pointer"
+                    style={{ colorScheme: 'dark' }}
+                  />
+                  <div className="absolute right-12 top-1/2 transform -translate-y-1/2 pointer-events-none text-xs text-slate-500 select-none hidden sm:block">
+                    Preferred shoot date (optional)
                   </div>
                 </div>
 
+                {/* Message */}
                 <div className="relative group">
-                  <div className="relative">
-                    <MessageSquare className={`absolute left-3 top-4 w-5 h-5 transition-colors duration-300 ${
-                      focusedField === 'message' ? 'text-blue-400' : 'text-gray-400'
-                    }`} />
+                  <span className="absolute left-4 top-4 text-slate-500 group-focus-within:text-blue-400 transition-colors duration-300">
+                    <MessageSquare size={18} />
+                  </span>
                   <textarea
-                      ref={messageRef}
+                    ref={messageRef}
                     id="message"
                     name="message"
                     value={formData.message}
                     onChange={handleInputChange}
-                      onKeyDown={(e) => handleKeyDown(e, 'message')}
-                      onFocus={() => handleFieldFocus('message')}
-                      onBlur={handleFieldBlur}
+                    onKeyDown={(e) => handleKeyDown(e, 'message')}
+                    onFocus={() => handleFieldFocus('message')}
+                    onBlur={handleFieldBlur}
                     required
-                    rows={6}
-                      className={`w-full pl-12 pr-4 py-4 border-2 rounded-xl text-white placeholder-transparent focus:outline-none transition-all duration-300 resize-none ${
-                        focusedField === 'message' 
-                          ? 'border-blue-500 bg-slate-700/80 shadow-lg shadow-blue-500/20' 
-                          : 'bg-slate-700/50 border-slate-600 hover:border-slate-500'
-                      }`}
-                    placeholder="Tell me about your photography needs, vision, and any specific requirements..."
+                    rows={5}
+                    placeholder="Tell me about your details, location, style preferences, and any thoughts you have..."
+                    className="w-full pl-12 pr-4 py-4 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/50 focus:bg-slate-950 resize-none transition-all duration-300"
                   />
-                    <label 
-                      htmlFor="message" 
-                      className={`absolute left-12 transition-all duration-300 pointer-events-none ${
-                        formData.message || focusedField === 'message'
-                          ? 'top-1 text-xs text-blue-400 bg-slate-800/50 px-1 rounded'
-                          : 'top-2 text-sm text-gray-400'
-                      }`}
-                    >
-                      Message *
-                    </label>
-                  </div>
                   
-                  {/* Character counter */}
-                  <div className="mt-2 flex justify-between text-sm">
-                    <span className="text-gray-400">
-                      {formData.message.length > 0 && `${formData.message.length} characters`}
+                  <div className="flex justify-between text-[10px] text-slate-500 mt-2 px-1">
+                    <span>
+                      {formData.message.length > 0 && `${formData.message.length} / 2000 characters`}
                     </span>
-                    <span className="text-gray-500">
-                      Press Enter to submit, Shift+Enter for new line
-                    </span>
+                    <span className="hidden sm:inline">Press Enter to send (Shift + Enter for new line)</span>
                   </div>
                 </div>
 
-                {/* Math Challenge */}
-                <div className="relative group">
-                  <div className="relative">
-                    <div className="flex items-center space-x-3">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Security Check *
-                        </label>
-                        <div className="flex items-center space-x-3">
-                          <span className="text-white text-lg font-medium bg-slate-700/50 px-4 py-3 rounded-xl border-2 border-slate-600">
-                            {mathChallenge.question} = ?
-                          </span>
-                          <input
-                            type="number"
-                            value={userAnswer}
-                            onChange={(e) => setUserAnswer(e.target.value)}
-                            className="w-20 px-3 py-3 border-2 rounded-xl text-white text-center focus:outline-none transition-all duration-300 bg-slate-700/50 border-slate-600 hover:border-slate-500 focus:border-blue-500 focus:bg-slate-700/80"
-                            placeholder="?"
-                            required
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-gray-400">
-                          Please solve this simple math problem to verify you're human
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMathChallenge(generateMathChallenge());
-                          setUserAnswer('');
-                        }}
-                        title="Generate new challenge"
-                        className="group relative inline-flex items-center gap-2 px-4 py-2 rounded-xl overflow-hidden transition-all duration-300 border border-cyan-500/40 text-cyan-300 hover:text-white bg-slate-800/60 hover:bg-slate-800 shadow-[0_0_12px_rgba(34,211,238,0.15)]"
-                      >
-                        <span className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-cyan-600/20 via-blue-600/20 to-purple-600/20" />
-                        <span className="absolute -inset-px rounded-xl border border-transparent group-hover:border-cyan-400/40 transition-colors duration-300" />
-                        <svg className="relative w-4 h-4 text-cyan-300 group-hover:text-cyan-200 transition-colors duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                          <path d="M21 3v6h-6" />
-                        </svg>
-                        <span className="relative text-sm font-medium tracking-wide">New Challenge</span>
-                        <span className="relative ml-1 inline-flex">
-                          <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-pulse" />
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Success Message */}
-                {formStatus === 'success' && (
-                  <div className="bg-green-600/20 border border-green-500/50 rounded-xl p-4 flex items-center gap-3">
-                    <CheckCircle size={24} className="text-green-400 flex-shrink-0" />
-                    <div>
-                      <h3 className="text-green-400 font-semibold">Message Sent Successfully!</h3>
-                      <p className="text-green-300 text-sm">Thank you for your message. I'll get back to you within 24 hours.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error Message - Now handled by popup */}
-
-                <div className="space-y-4">
-                  {/* Keyboard shortcuts hint */}
-                  <div className="text-center text-sm text-gray-500">
-                    <span className="inline-flex items-center gap-4">
-                      <span>💡 <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Enter</kbd> to submit</span>
-                      <span>💡 <kbd className="px-2 py-1 bg-slate-700 rounded text-xs">Esc</kbd> to clear</span>
-                    </span>
-                </div>
-
+                {/* Submit button */}
                 <button
                   type="submit"
-                    disabled={formStatus === 'submitting'}
-                    className="group w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-600 disabled:to-gray-700 text-white py-4 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-3 shadow-lg hover:shadow-xl hover:shadow-blue-500/25 transform hover:-translate-y-1 disabled:transform-none disabled:cursor-not-allowed relative overflow-hidden"
+                  disabled={formStatus === 'submitting'}
+                  className="group w-full relative bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 disabled:from-slate-800 disabled:to-slate-800 text-white py-4 rounded-2xl font-bold tracking-wide transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/10 hover:shadow-cyan-500/20 transform hover:-translate-y-0.5 disabled:transform-none disabled:cursor-not-allowed overflow-hidden"
                 >
-                    {/* Button background animation */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-blue-500 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                    
-                    {formStatus === 'submitting' ? (
+                  {formStatus === 'submitting' ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        <span>Sending Message...</span>
+                      <span>Sending inquiry...</span>
                     </>
                   ) : (
                     <>
-                        <Send size={20} className="group-hover:translate-x-1 transition-transform duration-300" />
-                        <span>Send Message</span>
-                        <div className="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <ArrowRight size={16} className="text-white" />
-                        </div>
+                      <Send size={16} className="group-hover:translate-x-1 group-hover:-translate-y-0.5 transition-transform duration-300" />
+                      <span>Transmit Shoot Request</span>
+                      <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-300" />
                     </>
                   )}
                 </button>
-                </div>
               </form>
-              </div>
-            </div>
-
-            {/* Contact Information */}
-            <div className="space-y-8">
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-br from-blue-600/20 to-purple-600/20 rounded-2xl blur-sm"></div>
-                <div className="relative bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
-                  <div className="text-center mb-6">
-                    <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-600/20 to-cyan-600/20 rounded-full px-4 py-2 mb-4">
-                      <Phone className="w-5 h-5 text-purple-400" />
-                      <span className="text-white font-semibold text-sm">Get In Touch</span>
-                    </div>
-                    <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                      Contact Information
-                    </h2>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    {contactInfo.map((info, index) => {
-                      const isCopyable = info.title === 'Email' || info.title === 'Phone';
-                      return (
-                        <div
-                          key={index}
-                          className={`group relative overflow-hidden rounded-xl transition-all duration-300 ${
-                            isCopyable 
-                              ? 'cursor-pointer hover:scale-105' 
-                              : 'cursor-default'
-                          }`}
-                          onClick={isCopyable ? async () => {
-                            await navigator.clipboard.writeText(info.value);
-                            setCopiedIndex(index);
-                            setTimeout(() => setCopiedIndex(null), 1500);
-                          } : undefined}
-                        >
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                          <div className="relative flex items-center p-4 bg-slate-700/30 hover:bg-slate-700/50 transition-colors duration-300">
-                            <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-3 rounded-xl mr-4 group-hover:scale-110 transition-transform duration-300">
-                              <info.icon size={20} className="text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="text-white font-semibold text-sm">{info.title}</h3>
-                              <p className="text-gray-300 text-sm">
-                                {info.value}
-                                {copiedIndex === index && (
-                                  <span className="ml-2 text-green-400 font-semibold text-xs">✓ Copied!</span>
-                                )}
-                              </p>
-                            </div>
-                            {isCopyable && (
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                <div className="w-6 h-6 bg-blue-500/20 rounded-full flex items-center justify-center">
-                                  <svg className="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Social Media */}
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-br from-cyan-600/20 to-pink-600/20 rounded-2xl blur-sm"></div>
-                <div className="relative bg-slate-800/80 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
-                  <div className="text-center mb-6">
-                    <div className="inline-flex items-center gap-3 bg-gradient-to-r from-cyan-600/20 to-pink-600/20 rounded-full px-4 py-2 mb-4">
-                      <Camera className="w-5 h-5 text-cyan-400" />
-                      <span className="text-white font-semibold text-sm">Follow My Work</span>
-                    </div>
-                    <h3 className="text-xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                      Stay Connected
-                    </h3>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {socialLinks.map((social, index) => (
-                      <a
-                        key={index}
-                        href={social.url}
-                        className="group relative overflow-hidden rounded-xl transition-all duration-300 hover:scale-105"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                        <div className="relative flex items-center p-4 bg-slate-700/30 hover:bg-slate-700/50 transition-colors duration-300">
-                          <div className="bg-gradient-to-br from-cyan-500 to-pink-500 p-3 rounded-xl mr-4 group-hover:scale-110 transition-transform duration-300">
-                            <social.icon size={18} className="text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-white font-semibold text-sm">{social.name}</h4>
-                            <p className="text-gray-300 text-xs">{social.handle}</p>
-                          </div>
-                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <div className="w-6 h-6 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                              <svg className="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Response Promise */}
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-green-600/20 to-emerald-600/20 rounded-2xl blur-sm"></div>
-                <div className="relative bg-gradient-to-br from-green-600/20 to-emerald-600/20 backdrop-blur-sm rounded-2xl p-6 border border-green-500/20 text-center overflow-hidden">
-                  <div className="absolute top-0 right-0 w-20 h-20 bg-green-400/10 rounded-full -translate-y-10 translate-x-10"></div>
-                  <div className="absolute bottom-0 left-0 w-16 h-16 bg-emerald-400/10 rounded-full translate-y-8 -translate-x-8"></div>
-                  <div className="relative">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-full mb-4 mx-auto">
-                      <Clock size={24} className="text-white" />
-                    </div>
-                    <h3 className="text-white font-bold text-lg mb-2">Quick Response Guarantee</h3>
-                    <p className="text-green-100 text-sm leading-relaxed">
-                      I'll respond to your inquiry within 24 hours, usually much sooner!
-                    </p>
-                    <div className="mt-4 flex justify-center">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse delay-100"></div>
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse delay-200"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Modern Error Popup */}
       {showErrorPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Backdrop with blur */}
           <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/65 backdrop-blur-sm"
             onClick={() => setShowErrorPopup(false)}
           />
-          
-          {/* Popup Content */}
-          <div className="relative bg-slate-800 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border border-red-500/20 transform animate-in zoom-in-95 duration-300">
-            {/* Close button */}
+          <div className="relative bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl transform animate-in zoom-in-95 duration-200">
             <button
               onClick={() => setShowErrorPopup(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors duration-200"
@@ -1423,28 +1084,22 @@ ${sanitizedData.message}
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
-            {/* Error Icon */}
-            <div className="flex items-center justify-center w-16 h-16 bg-red-500/20 rounded-full mx-auto mb-6">
+            <div className="flex items-center justify-center w-16 h-16 bg-red-500/10 rounded-2xl mx-auto mb-6 border border-red-500/20">
               <AlertCircle size={32} className="text-red-400" />
             </div>
-            
-            {/* Error Content */}
             <div className="text-center">
               <h3 className="text-xl font-bold text-white mb-3">
-                {errorMessage.includes('Telegram') ? 'Telegram Username Required' : 'Form Error'}
+                {errorMessage.includes('Telegram') ? 'Telegram Username Required' : 'Inquiry Error'}
               </h3>
-              <p className="text-gray-300 mb-6 leading-relaxed">
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
                 {errorMessage}
               </p>
-              
-              {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => setShowErrorPopup(false)}
-                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:scale-105"
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-2xl font-semibold transition-all duration-200"
                 >
-                  Got it
+                  Dismiss
                 </button>
                 {errorMessage.includes('Telegram') && (
                   <button
@@ -1453,7 +1108,7 @@ ${sanitizedData.message}
                       setShowErrorPopup(false);
                       emailRef.current?.focus();
                     }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:scale-105"
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-semibold transition-all duration-200"
                   >
                     Switch to Email
                   </button>
@@ -1465,19 +1120,19 @@ ${sanitizedData.message}
       )}
 
       {/* Footer */}
-      <section className="py-12 bg-black border-t border-gray-800">
+      <section className="py-12 bg-black border-t border-slate-900 mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center text-gray-400 text-sm">
-            <p>Copyright © 2025</p>
+          <div className="flex flex-col sm:flex-row justify-between items-center text-slate-500 text-sm">
+            <p>Copyright © 2025 Hary Pictures</p>
             <div className="flex gap-6 mt-4 sm:mt-0">
               <a 
-                href="https://www.instagram.com/hary_picture7?igsh=MXFqeDFmeGFxdXRzNQ==" 
+                href="https://www.instagram.com/hary_picture7" 
                 className="hover:text-white transition-colors duration-300" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 aria-label="Instagram"
               >
-                <Instagram size={20} />
+                <Instagram size={18} />
               </a>
               <a 
                 href="https://t.me/harygraphic" 
@@ -1486,22 +1141,12 @@ ${sanitizedData.message}
                 rel="noopener noreferrer"
                 aria-label="Telegram"
               >
-                <TelegramIcon width={20} height={20} />
-              </a>
-              <a 
-                href="https://www.tiktok.com/@hary.picture?_t=ZM-90Pkwl5a2HM&_r=1" 
-                className="hover:text-white transition-colors duration-300" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                aria-label="TikTok"
-              >
-                <TikTokIcon size={20} />
+                <TelegramIcon size={18} />
               </a>
             </div>
           </div>
         </div>
       </section>
-      
     </div>
   );
 };
